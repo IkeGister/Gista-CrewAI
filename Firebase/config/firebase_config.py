@@ -58,3 +58,22 @@ class FirebaseConfig:
         blob = self.bucket.blob(source_blob_name)
         blob.download_to_filename(destination_file_path)
         print(f"File {source_blob_name} downloaded to {destination_file_path}.")
+
+    def get_pyrebase_config(self):
+        """Get the configuration needed for Pyrebase."""
+        return {
+            "apiKey": os.getenv("FIREBASE_API_KEY"),
+            "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
+            "databaseURL": os.getenv("FIREBASE_DATABASE_URL"),
+            "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
+        }
+
+    def __init__(self):
+        # Load your configuration here
+        self.config = {
+            'apiKey': os.getenv("FIREBASE_API_KEY"),
+            # other configurations...
+        }
+
+    def get_config(self):
+        return self.config
