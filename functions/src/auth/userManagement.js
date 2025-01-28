@@ -36,7 +36,7 @@ router.post('/create-user', async (req, res) => {
 router.put('/update-user', async (req, res) => {
     try {
         // Verify ID token from Authorization header
-        const idToken = req.headers.authorization?.split('Bearer ')[1];
+        const idToken = req.headers.authorization && req.headers.authorization.split('Bearer ')[1];
         if (!idToken) {
             return res.status(401).json({ error: 'No token provided' });
         }

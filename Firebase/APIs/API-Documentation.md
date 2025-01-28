@@ -21,120 +21,230 @@ Firebase/
 # Firebase API Documentation
 
 ## Overview
-This document outlines the APIs designed to connect a client-side mobile application to Firebase services, including authentication, document storage, analytics, and payment processing. The APIs are modular, easy to test, and maintainable.
+This document outlines the APIs for the Gista application, including authentication, gist management, link management, and Firebase services integration. The APIs are built using Firebase Cloud Functions and follow RESTful principles.
 
-## API Endpoints
+## Base URL
+- **Development**: `http://localhost:5001`
+- **Production**: `https://us-central1-dof-ai.cloudfunctions.net/api`
 
-### 1. Authentication API (`auth.py`)
+## Current API Endpoints
 
-#### POST /api/auth/signin
-- **Description**: Sign in a user using Google authentication.
+### 1. Authentication API (`/auth`)
+
+#### POST /auth/create-user
+- **Description**: Create a new user in Firebase Authentication and Firestore.
 - **Request Body**:
     ```json
     {
-      "id_token": "google_id_token"
+      "email": "user@example.com",
+      "password": "securepassword",
+      "username": "username123"
     }
     ```
 - **Responses**:
-    - **200 OK**: Returns user data (email, user ID) and authentication token.
-    - **401 Unauthorized**: Invalid token.
+    - **201**: User created successfully
+        ```json
+        {
+          "message": "User created successfully",
+          "userId": "user123"
+        }
+        ```
+    - **500**: Error creating user
 
-#### POST /api/auth/signup
-- **Description**: Register a new user.
+#### PUT /auth/update-user
+- **Description**: Update user information in Firestore.
+- **Headers**: 
+    - `Authorization: Bearer <token>`
 - **Request Body**:
     ```json
     {
-      "email": "user@example.com"
+      "username": "newUsername",
+      "email": "newemail@example.com"
     }
     ```
 - **Responses**:
-    - **201 Created**: Returns user data and authentication token.
-    - **400 Bad Request**: Invalid input data.
+    - **200**: User updated successfully
+    - **401**: No token provided
+    - **500**: Error updating user
 
-### 2. Storage API (`storage.py`)
+### 2. Links API (`/links`)
 
-#### POST /api/storage/upload
-- **Description**: Upload a document to Firebase Storage.
-- **Request Body**: Form-data containing the file.
-- **Responses**:
-    - **200 OK**: Returns the URL of the uploaded document.
-    - **400 Bad Request**: Invalid file type or size.
-
-#### GET /api/storage/documents/{document_id}
-- **Description**: Retrieve a document by ID.
-- **Responses**:
-    - **200 OK**: Returns document data.
-    - **404 Not Found**: Document does not exist.
-
-### 3. Links API (`links.py`)
-
-#### POST /api/links/store
-- **Description**: Store a new link for the user.
+#### POST /links/store
+- **Description**: Store a new link for processing into a gist.
 - **Request Body**:
     ```json
     {
       "user_id": "user123",
-      "link": "https://example.com/article1"
-    }
-    ```
-- **Responses**:
-    - **200 OK**: Link stored successfully.
-    - **400 Bad Request**: Invalid input data.
-
-#### GET /api/links/{user_id}
-- **Description**: Retrieve all links for a user.
-- **Responses**:
-    - **200 OK**: Returns an array of links.
-    - **404 Not Found**: User not found.
-
-### 4. Analytics API (`analytics.py`)
-
-#### POST /api/analytics/event
-- **Description**: Log an event to Firebase Analytics.
-- **Request Body**:
-    ```json
-    {
-      "event_name": "event_name",
-      "parameters": {
-        "key": "value"
+      "link": {
+        "category": "Technology",
+        "url": "https://example.com/article"
       }
     }
     ```
 - **Responses**:
-    - **200 OK**: Event logged successfully.
-    - **400 Bad Request**: Invalid event data.
+    - **200**: Link stored successfully
+        ```json
+        {
+          "message": "Link stored successfully",
+          "link": {
+            "link_id": "link_123",
+            "category": "Technology",
+            "date_added": "2024-01-25T09:00:00Z",
+            "gist_created": {
+              "gist_created": false,
+              "gist_id": null,
+              "image_url": null,
+              "link_id": "link_123",
+              "link_title": "",
+              "link_type": "Web",
+              "url": "https://example.com/article"
+            }
+          }
+        }
+        ```
+    - **400**: Invalid input data
+    - **500**: Error storing link
 
-### 5. Payments API (`payments.py`)
+#### GET /links/:user_id
+- **Description**: Retrieve all links for a user.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+- **Responses**:
+    - **200**: Returns array of links and count
+        ```json
+        {
+          "links": [{
+            "category": "Technology",
+            "date_added": "2024-01-25T09:00:00Z",
+            "gist_created": {
+              "gist_created": false,
+              "gist_id": null,
+              "image_url": null,
+              "link_id": "link_123",
+              "link_title": "",
+              "link_type": "Web",
+              "url": "https://example.com/article"
+            }
+          }],
+          "count": 1
+        }
+        ```
+    - **404**: User not found
 
-#### POST /api/payments/charge
-- **Description**: Process a payment using Stripe.
+### 3. Gists API (`/gists`)
+
+#### POST /gists/add/:user_id
+- **Description**: Create a new gist from processed content.
+- **Parameters**:
+    - `user_id`: User's unique identifier
 - **Request Body**:
     ```json
     {
-      "amount": 1000,
-      "currency": "usd",
-      "source": "tok_visa",
-      "description": "Payment for order #1234"
+      "title": "Tech Trends Gist",
+      "link": "https://example.com/article",
+      "image_url": "https://example.com/image.jpg",
+      "category": "Technology",
+      "segments": [{
+        "segment_duration": 90,
+        "segment_index": 0,
+        "segment_title": "Introduction"
+      }],
+      "playback_duration": 180
     }
     ```
 - **Responses**:
-    - **200 OK**: Payment processed successfully.
-    - **400 Bad Request**: Invalid payment data.
+    - **200**: Gist created successfully
+    - **400**: Missing required fields
+    - **500**: Error creating gist
+
+#### PUT /gists/update/:user_id/:gist_index
+- **Description**: Update gist status and metadata.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+    - `gist_index`: Index of the gist in user's gists array
+- **Request Body**:
+    ```json
+    {
+      "status": {
+        "is_done_playing": true,
+        "is_now_playing": false,
+        "playback_time": 180
+      },
+      "is_played": true,
+      "ratings": 5
+    }
+    ```
+- **Responses**:
+    - **200**: Gist updated successfully
+    - **404**: Gist not found
+    - **500**: Error updating gist
+
+#### GET /gists/:user_id
+- **Description**: Retrieve all gists for a user.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+- **Responses**:
+    - **200**: Returns array of gists
+        ```json
+        {
+          "gists": [{
+            "title": "Tech Trends Gist",
+            "category": "Technology",
+            "date_created": "2024-01-25T08:30:00Z",
+            "image_url": "https://example.com/image.jpg",
+            "is_played": false,
+            "is_published": true,
+            "link": "https://example.com/article",
+            "playback_duration": 180,
+            "publisher": "theNewGista",
+            "ratings": 0,
+            "segments": [{
+              "segment_duration": 90,
+              "segment_index": 0,
+              "segment_title": "Introduction"
+            }],
+            "status": {
+              "is_done_playing": false,
+              "is_now_playing": false,
+              "playback_time": 0
+            }
+          }]
+        }
+        ```
+    - **404**: User not found
 
 ## Testing
-Each API module will have corresponding test files located in the `tests/` directory. The tests will cover the following:
+Each API endpoint has corresponding test files. The tests cover:
 
-- **test_auth.py**: Tests for authentication endpoints (sign in, sign up).
-- **test_storage.py**: Tests for document upload and retrieval.
-- **test_links.py**: Tests for storing and retrieving user links.
-- **test_analytics.py**: Tests for event logging.
-- **test_payments.py**: Tests for payment processing.
+- Authentication flows
+- Link management operations
+- Gist creation and updates
+- Error handling
+- Data validation
 
 ### Best Practices
-- **Modularity**: Each API is separated into its own module for clarity and maintainability.
-- **Error Handling**: Implement consistent error handling across all APIs.
-- **Testing**: Write unit tests for each API endpoint to ensure reliability.
-- **Documentation**: Use tools like Swagger or Postman for API documentation and testing.
+- **Authentication**: All endpoints requiring authentication use Firebase Auth tokens
+- **Data Validation**: Input validation on all POST/PUT requests
+- **Error Handling**: Consistent error response format
+- **Documentation**: Keep API documentation updated with changes
+- **Testing**: Maintain comprehensive test coverage
 
-## Conclusion
-This API design aims to provide a robust and scalable solution for connecting a mobile application to Firebase services. The modular structure and comprehensive documentation will facilitate easy onboarding for new engineers and ensure maintainability.
+## Security
+- Firebase Authentication for user management
+- Secure credential storage using service accounts
+- Environment variable protection for sensitive data
+- CORS enabled for specified origins
+
+## Development Setup
+1. Install dependencies: `npm install` in functions directory
+2. Set up environment variables
+3. Initialize Firebase Admin SDK with service account
+4. Run locally: `firebase serve --only functions`
+
+## Deployment
+Deploy to Firebase Cloud Functions:
+```bash
+firebase deploy --only functions
+```
+
+The API will be available at: `https://us-central1-dof-ai.cloudfunctions.net/api`

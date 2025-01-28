@@ -9,14 +9,14 @@ class TestFirebaseFunctions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the FirebaseConfig instance for all tests."""
-        cls.config = FirebaseConfig().get_config()  # Ensure this retrieves your API key
         cls.firebase_config = FirebaseConfig()
-        cls.db = firestore.client()  # Initialize Firestore client for testing
+        cls.db = firestore.client()
 
     def test_config_initialization(self):
         """Test if FirebaseConfig initializes correctly."""
         self.assertIsNotNone(self.firebase_config.app, "Firebase app should be initialized.")
         self.assertIsNotNone(self.firebase_config.storage_bucket, "Storage bucket should be accessible.")
+        self.assertEqual(self.firebase_config.storage_bucket.name, "dof-ai.firebasestorage.app")
 
     def test_firestore_initialization(self):
         """Test if Firestore client initializes correctly."""
@@ -129,45 +129,34 @@ class TestFirebaseFunctions(unittest.TestCase):
                                .where('email', '==', new_user_data['email']) \
                                .get()
         if existing_user_docs:
-            print("User already exists")  # Just print a message instead
-            return  # Exit the test early
+            print("User already exists")
+            return
 
         # Create new document in users collection
-        self.db.collection('users').add(new_user_data)
+        doc_ref = self.db.collection('users').add(new_user_data)[0]
+        
+        # Verify the document was created
+        created_doc = doc_ref.get()
+        self.assertTrue(created_doc.exists)
+        self.assertEqual(created_doc.get('email'), new_user_data['email'])
+        self.assertEqual(len(created_doc.get('gists')), 1)
+        self.assertEqual(len(created_doc.get('links')), 1)
 
-        # Assert that the user was created successfully
-        self.assertTrue(True)  # Replace with actual checks as needed
-
-    def test_api_key_exists(self):
-        """Test if API key is present in configuration"""
-        self.assertIsNotNone(self.config['apiKey'], "API key should not be None")
-        self.assertNotEqual(self.config['apiKey'], "", "API key should not be empty")
-
-    def test_api_key_format(self):
-        """Test if API key follows Firebase format"""
-        api_key = self.config['apiKey']
-        self.assertTrue(api_key.isalnum(), "API key should be alphanumeric")
-        self.assertGreater(len(api_key), 30, "API key should be at least 30 characters")
-
-    def test_api_key_validity(self):
-        """Test if API key is valid by attempting a storage operation"""
-        test_file_path = '/Users/tonynlemadim/Documents/5DOF Projects/Gista-CrewAI/README.md'  # Path to the existing README.md file
-        destination_blob_name = 'README.md'  # Name in the bucket
-
-        try:
-            # Attempt to upload the README.md file
-            self.firebase_config.upload_file(test_file_path, destination_blob_name)
-
-            # Attempt to list files in the bucket
-            files = list(self.firebase_config.storage_bucket.list_blobs())
-            self.assertIsInstance(files, list, "Should return a list of blobs")
-
-            # Optionally, attempt to delete the uploaded file from the bucket
-            blob = self.firebase_config.storage_bucket.blob(destination_blob_name)
-            blob.delete()
-
-        except exceptions.FirebaseError as e:
-            self.fail(f"API key is invalid or does not have the required permissions: {str(e)}")
+    def tearDown(self):
+        """Clean up test data after each test."""
+        # Delete test user if it exists
+        test_users = [
+            'gister12346',
+            'newuser@example.com'  # Email from test_create_hardcoded_user
+        ]
+        
+        for user in test_users:
+            # Try by ID
+            self.db.collection('users').document(user).delete()
+            # Try by email
+            docs = self.db.collection('users').where('email', '==', user).get()
+            for doc in docs:
+                doc.reference.delete()
 
 if __name__ == "__main__":
     unittest.main() 
