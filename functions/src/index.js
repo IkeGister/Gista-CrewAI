@@ -26,11 +26,13 @@ app.use(express.json());
 const userRoutes = require("./auth/userManagement");
 const linkRoutes = require("./links/linkManagement");
 const gistRoutes = require("./gists/gistManagement");
+const categoryRoutes = require("./categories/categoriesManagement");
 
 // Use routes
 app.use("/auth", userRoutes);
 app.use("/links", linkRoutes);
 app.use("/gists", gistRoutes);
+app.use("/categories", categoryRoutes);
 
 // Export the Express app as a Firebase Cloud Function
 exports.api = functions.https.onRequest(app); 
