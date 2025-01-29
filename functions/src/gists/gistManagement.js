@@ -25,7 +25,7 @@ router.post('/add/:user_id', async (req, res) => {
         const gistWithMetadata = {
             title: gistData.title,
             category: gistData.category,
-            date_created: admin.firestore.FieldValue.serverTimestamp(),
+            date_created: new Date().toISOString(),
             image_url: gistData.image_url,
             is_played: false,
             is_published: true,  // Default to true, can be overridden

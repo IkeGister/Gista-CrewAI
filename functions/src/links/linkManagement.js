@@ -10,15 +10,15 @@ router.post("/store", async (req, res) => {
     // Create link document with metadata
     const linkData = {
       category: link.category || "Uncategorized",
-      date_added: admin.firestore.FieldValue.serverTimestamp(),
+      date_added: new Date().toISOString(),  // Changed from serverTimestamp to ISO string
       gist_created: {
         gist_created: false,  // Initially false
         gist_id: null,
         image_url: null,
         link_id: `link_${Date.now()}`,  // Generate unique link ID
         link_title: link.title || "",
-        link_type: link.endsWith(".pdf") ? "PDF" : "Web",
-        url: link
+        link_type: link.url?.endsWith(".pdf") ? "PDF" : "Web",
+        url: link.url
       }
     };
 
