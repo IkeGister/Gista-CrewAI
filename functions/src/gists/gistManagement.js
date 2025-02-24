@@ -42,7 +42,9 @@ router.post('/add/:user_id', async (req, res) => {
             status: {
                 is_done_playing: false,
                 is_now_playing: false,
-                playback_time: 0
+                playback_time: 0,
+                in_productionQueue: false,  // New field
+                production_status: 'pending'  // New field
             },
             users: gistData.users || 0
         };
@@ -87,13 +89,16 @@ router.put('/update/:user_id/:gist_id', async (req, res) => {
         userData.gists[gistIndex] = {
             ...currentGist,
             status: {
-                is_done_playing: updates.is_done_playing || currentGist.status.is_done_playing,
-                is_now_playing: updates.is_now_playing || currentGist.status.is_now_playing,
-                playback_time: updates.playback_time || currentGist.status.playback_time
+                ...currentGist.status,
+                is_done_playing: updates.is_done_playing ?? currentGist.status.is_done_playing,
+                is_now_playing: updates.is_now_playing ?? currentGist.status.is_now_playing,
+                playback_time: updates.playback_time ?? currentGist.status.playback_time,
+                in_productionQueue: updates.in_productionQueue ?? currentGist.status.in_productionQueue,
+                production_status: updates.production_status ?? currentGist.status.production_status
             },
-            is_played: updates.is_played || currentGist.is_played,
-            ratings: updates.ratings || currentGist.ratings,
-            users: updates.users || currentGist.users
+            is_played: updates.is_played ?? currentGist.is_played,
+            ratings: updates.ratings ?? currentGist.ratings,
+            users: updates.users ?? currentGist.users
         };
 
         await userRef.update({
