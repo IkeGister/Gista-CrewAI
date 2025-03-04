@@ -8,6 +8,21 @@ db = firestore.client()
 
 auth_bp = Blueprint('auth', __name__)
 
+def handle_auth_request(request):
+    """
+    Handle authentication requests
+    Routes to the appropriate endpoint based on the path
+    """
+    path = request.path.strip('/').replace('auth/', '')
+    method = request.method
+    
+    if path == 'signin' and method == 'POST':
+        return sign_in()
+    elif path == 'create_user' and method == 'POST':
+        return create_user()
+    else:
+        return jsonify({'error': 'Invalid auth endpoint'}), 404
+
 @auth_bp.route('/api/auth/signin', methods=['POST'])
 def sign_in():
     data = request.json

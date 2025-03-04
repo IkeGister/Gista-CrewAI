@@ -1,16 +1,13 @@
 import functions_framework
-from core.auth.controllers import AuthController
-from core.storage.controllers import StorageController
-from core.notifications.controllers import NotificationController
-from utils.logger import setup_logger
+from Firebase.APIs.auth import handle_auth_request
+from Firebase.APIs.GistaAPIs import handle_storage_request
+from Firebase.APIs.links import handle_notification_request
+from Firebase.utils.logger import setup_logger
 
 # Initialize logger
 logger = setup_logger()
 
-# Initialize controllers
-auth_controller = AuthController()
-storage_controller = StorageController()
-notification_controller = NotificationController()
+# No need to initialize controllers as we'll directly use the handler functions
 
 @functions_framework.http
 def handle_request(request):
@@ -25,11 +22,11 @@ def handle_request(request):
         
         # Route to appropriate controller
         if path.startswith('auth/'):
-            return auth_controller.handle_request(request)
+            return handle_auth_request(request)
         elif path.startswith('storage/'):
-            return storage_controller.handle_request(request)
+            return handle_storage_request(request)
         elif path.startswith('notifications/'):
-            return notification_controller.handle_request(request)
+            return handle_notification_request(request)
         else:
             return {'error': 'Invalid endpoint'}, 404
             

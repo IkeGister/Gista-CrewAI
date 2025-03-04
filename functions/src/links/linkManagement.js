@@ -43,6 +43,9 @@ router.put("/update-gist-status/:user_id/:link_id", async (req, res) => {
     const { user_id, link_id } = req.params;
     const { gist_id, image_url, link_title } = req.body;
 
+    // Use link_id as gist_id if not provided to ensure consistency
+    const finalGistId = gist_id || link_id;
+
     const userRef = admin.firestore().collection("users").doc(user_id);
     const userDoc = await userRef.get();
         
@@ -63,7 +66,7 @@ router.put("/update-gist-status/:user_id/:link_id", async (req, res) => {
     userData.links[linkIndex].gist_created = {
       ...userData.links[linkIndex].gist_created,
       gist_created: true,
-      gist_id,
+      gist_id: finalGistId,
       image_url,
       link_title: link_title || userData.links[linkIndex].gist_created.link_title
     };

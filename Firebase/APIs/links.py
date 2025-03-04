@@ -11,6 +11,28 @@ db = firestore.client()  # Firestore client should be created after initializati
 
 links_bp = Blueprint('links', __name__)
 
+def handle_notification_request(request):
+    """
+    Handle notification-related requests
+    Routes to the appropriate endpoint based on the path
+    """
+    path = request.path.strip('/').replace('notifications/', '')
+    method = request.method
+    
+    if path == 'links/store' and method == 'POST':
+        return store_link()
+    elif path.startswith('links/') and method == 'GET':
+        user_id = path.replace('links/', '')
+        return get_links(user_id)
+    elif path.startswith('links/update/') and method == 'POST':
+        user_id = path.replace('links/update/', '')
+        return update_link(user_id)
+    elif path.startswith('gists/add/') and method == 'POST':
+        user_id = path.replace('gists/add/', '')
+        return add_gist(user_id)
+    else:
+        return jsonify({'error': 'Invalid notification endpoint'}), 404
+
 @links_bp.route('/api/links/store', methods=['POST'])
 def store_link():
     data = request.json

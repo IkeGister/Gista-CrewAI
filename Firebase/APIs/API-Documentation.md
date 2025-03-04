@@ -43,13 +43,13 @@ This document outlines the APIs for the Gista application, including authenticat
 
 ### 1. Authentication API (`/auth`)
 
-#### POST /auth/create-user
+#### POST https://us-central1-dof-ai.cloudfunctions.net/api/auth/create_user
 - **Description**: Create a new user in Firebase Authentication and Firestore.
 - **Request Body**:
     ```json
     {
+      "user_id": "user123",
       "email": "user@example.com",
-      "password": "securepassword",
       "username": "username123"
     }
     ```
@@ -58,12 +58,27 @@ This document outlines the APIs for the Gista application, including authenticat
         ```json
         {
           "message": "User created successfully",
-          "userId": "user123"
+          "user_id": "user123"
         }
         ```
+    - **400**: User already exists or missing required fields
     - **500**: Error creating user
 
-#### PUT /auth/update-user
+#### DELETE https://us-central1-dof-ai.cloudfunctions.net/api/auth/delete_user/:user_id
+- **Description**: Delete a user and all their data from Firestore.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+- **Responses**:
+    - **200**: User deleted successfully
+        ```json
+        {
+          "message": "User user123 deleted successfully"
+        }
+        ```
+    - **404**: User not found
+    - **500**: Error deleting user
+
+#### PUT https://us-central1-dof-ai.cloudfunctions.net/api/auth/update-user
 - **Description**: Update user information in Firestore.
 - **Headers**: 
     - `Authorization: Bearer <token>`
@@ -81,7 +96,7 @@ This document outlines the APIs for the Gista application, including authenticat
 
 ### 2. Links API (`/links`)
 
-#### POST /links/store
+#### POST https://us-central1-dof-ai.cloudfunctions.net/api/links/store
 - **Description**: Store a new link for processing into a gist.
 - **Request Body**:
     ```json
@@ -116,7 +131,7 @@ This document outlines the APIs for the Gista application, including authenticat
         ```
     - **500**: Error storing link
 
-#### PUT /links/update-gist-status/:user_id/:link_id
+#### PUT https://us-central1-dof-ai.cloudfunctions.net/api/links/update-gist-status/:user_id/:link_id
 - **Description**: Update link's gist creation status.
 - **Parameters**:
     - `user_id`: User's unique identifier
@@ -152,7 +167,7 @@ This document outlines the APIs for the Gista application, including authenticat
     - **404**: User or link not found
     - **500**: Error updating link
 
-#### GET /links/:user_id
+#### GET https://us-central1-dof-ai.cloudfunctions.net/api/links/:user_id
 - **Description**: Retrieve all links for a user.
 - **Parameters**:
     - `user_id`: User's unique identifier
@@ -181,7 +196,7 @@ This document outlines the APIs for the Gista application, including authenticat
 
 ### 3. Gists API (`/gists`)
 
-#### POST /gists/add/:user_id
+#### POST https://us-central1-dof-ai.cloudfunctions.net/api/gists/add/:user_id
 - **Description**: Create a new gist from processed content.
 - **Parameters**:
     - `user_id`: User's unique identifier
@@ -234,7 +249,7 @@ This document outlines the APIs for the Gista application, including authenticat
     - **400**: Missing required fields
     - **500**: Error creating gist
 
-#### PUT /gists/update/:user_id/:gist_id
+#### PUT https://us-central1-dof-ai.cloudfunctions.net/api/gists/update/:user_id/:gist_id
 - **Description**: Update gist status and metadata.
 - **Parameters**:
     - `user_id`: User's unique identifier
@@ -256,7 +271,22 @@ This document outlines the APIs for the Gista application, including authenticat
     - **404**: User or gist not found
     - **500**: Error updating gist
 
-#### GET /gists/:user_id
+#### DELETE https://us-central1-dof-ai.cloudfunctions.net/api/gists/delete/:user_id/:gist_id
+- **Description**: Delete a specific gist from a user's gists array.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+    - `gist_id`: Gist's unique identifier
+- **Responses**:
+    - **200**: Gist deleted successfully
+        ```json
+        {
+          "message": "Gist gist_123 deleted successfully"
+        }
+        ```
+    - **404**: User or gist not found
+    - **500**: Error deleting gist
+
+#### GET https://us-central1-dof-ai.cloudfunctions.net/api/gists/:user_id
 - **Description**: Retrieve all gists for a user.
 - **Parameters**:
     - `user_id`: User's unique identifier
@@ -267,7 +297,7 @@ This document outlines the APIs for the Gista application, including authenticat
 
 ### 4. Categories API (`/categories`)
 
-#### GET /categories
+#### GET https://us-central1-dof-ai.cloudfunctions.net/api/categories
 - **Description**: Retrieve all categories
 - **Responses**:
     - **200**: Returns array of categories and count
@@ -284,7 +314,7 @@ This document outlines the APIs for the Gista application, including authenticat
         ```
     - **500**: Error fetching categories
 
-#### GET /categories/:slug
+#### GET https://us-central1-dof-ai.cloudfunctions.net/api/categories/:slug
 - **Description**: Get category by slug
 - **Parameters**:
     - `slug`: Category's URL-friendly name
@@ -293,7 +323,7 @@ This document outlines the APIs for the Gista application, including authenticat
     - **404**: Category not found
     - **500**: Error fetching category
 
-#### POST /categories/add
+#### POST https://us-central1-dof-ai.cloudfunctions.net/api/categories/add
 - **Description**: Create a new category with auto-incrementing ID
 - **Request Body**:
     ```json
@@ -318,7 +348,7 @@ This document outlines the APIs for the Gista application, including authenticat
     - **400**: Missing required fields or duplicate slug
     - **500**: Error creating category
 
-#### PUT /categories/update/:id
+#### PUT https://us-central1-dof-ai.cloudfunctions.net/api/categories/update/:id
 - **Description**: Update category name and/or tags
 - **Parameters**:
     - `id`: Category's unique identifier (e.g., cat001)
@@ -345,6 +375,29 @@ This document outlines the APIs for the Gista application, including authenticat
     - **400**: No fields to update or duplicate slug
     - **404**: Category not found
     - **500**: Error updating category
+
+### 5. Test Endpoint
+
+#### GET https://us-central1-dof-ai.cloudfunctions.net/api/test
+- **Description**: Simple endpoint to test if the API is working.
+- **Responses**:
+    - **200**: API is working
+        ```json
+        {
+          "message": "Express API is working!"
+        }
+        ```
+
+## Recommended Testing Flow in Hopscotch
+
+1. Test the API connectivity with `GET /test`
+2. Create a test user with `POST /auth/create_user`
+3. Add a gist to the user with `POST /gists/add/:user_id`
+4. Retrieve the user's gists with `GET /gists/:user_id`
+5. Update the gist with `PUT /gists/update/:user_id/:gist_id`
+6. Store a link for the user with `POST /links/store`
+7. Delete the gist with `DELETE /gists/delete/:user_id/:gist_id`
+8. Delete the user with `DELETE /auth/delete_user/:user_id`
 
 ## Security
 - Firebase Authentication for user management
