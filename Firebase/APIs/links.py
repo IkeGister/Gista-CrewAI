@@ -4,6 +4,11 @@ from flask import Blueprint, request, jsonify
 from Firebase.config.firebase_config import FirebaseConfig
 import uuid
 from datetime import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
 firebase_config = FirebaseConfig()  # This should initialize Firebase
@@ -82,25 +87,199 @@ def update_link(user_id):
 
 @links_bp.route('/api/gists/add/<user_id>', methods=['POST'])
 def add_gist(user_id):
-    try:
-        # Get the document reference
-        doc_ref = db.collection('users').document(user_id)
+    """
+    Add a gist for a user and notify the CrewAI service.
+    
+    Args:
+        user_id: The user ID
         
-        # Check if document exists
+    Returns:
+        A JSON response with the result
+    """
+    try:
+        # Get the user document
+        doc_ref = db.collection('users').document(user_id)
         doc = doc_ref.get()
         
+        # Check if the user exists
         if not doc.exists:
-            # Create the document if it doesn't exist
-            doc_ref.set({
-                'gists': []  # Initialize with empty gists array
-            })
-        
-        # Now update the document
+            return jsonify({"error": "User not found"}), 404
+            
+        # Get the gist data from the request
         gist_data = request.json
+        
+        # Generate a gist ID if not provided
+        if 'gistId' not in gist_data:
+            gist_data['gistId'] = f"gist_{uuid.uuid4().hex}"
+        
+        # Ensure all required fields are present with default values if needed
+        if 'title' not in gist_data:
+            gist_data['title'] = "Untitled Gist"
+            
+        if 'category' not in gist_data:
+            gist_data['category'] = "Uncategorized"
+            
+        if 'is_published' not in gist_data:
+            gist_data['is_published'] = True
+            
+        if 'link' not in gist_data:
+            gist_data['link'] = ""
+            
+        if 'image_url' not in gist_data:
+            gist_data['image_url'] = ""
+            
+        if 'ratings' not in gist_data:
+            gist_data['ratings'] = 0
+            
+        if 'users' not in gist_data:
+            gist_data['users'] = 0
+            
+        if 'is_played' not in gist_data:
+            gist_data['is_played'] = False
+            
+        if 'playback_duration' not in gist_data:
+            gist_data['playback_duration'] = 0
+            
+        if 'date_created' not in gist_data:
+            gist_data['date_created'] = datetime.now().isoformat() + 'Z'
+            
+        if 'publisher' not in gist_data:
+            gist_data['publisher'] = "theNewGista"
+            
+        # Set initial status if not provided
+        if 'status' not in gist_data:
+            gist_data['status'] = {
+                'in_productionQueue': False,
+                'production_status': 'Pending',
+                'is_done_playing': False,
+                'playback_time': 0,
+                'is_now_playing': False
+            }
+        else:
+            # Ensure all status fields are present
+            if 'in_productionQueue' not in gist_data['status']:
+                gist_data['status']['in_productionQueue'] = False
+                
+            if 'production_status' not in gist_data['status']:
+                gist_data['status']['production_status'] = 'Pending'
+                
+            if 'is_done_playing' not in gist_data['status']:
+                gist_data['status']['is_done_playing'] = False
+                
+            if 'playback_time' not in gist_data['status']:
+                gist_data['status']['playback_time'] = 0
+                
+            if 'is_now_playing' not in gist_data['status']:
+                gist_data['status']['is_now_playing'] = False
+        
+        # Ensure segments are properly formatted
+        if 'segments' not in gist_data:
+            gist_data['segments'] = []
+        
+        # Add the gist to Firebase
         doc_ref.update({
             'gists': firestore.ArrayUnion([gist_data])
         })
         
-        return jsonify({"message": "Gist added successfully"}), 200
+        # Get the gist ID for notifying the CrewAI service
+        gist_id = gist_data['gistId']
+        
+        # Notify the CrewAI service about the new gist
+        try:
+            # Import here to avoid circular imports
+            from Firebase.services import CrewAIService
+            
+            # Initialize the CrewAI service client
+            crew_ai_service = CrewAIService()
+            
+            # Call the CrewAI service to update the gist status using signal-based approach
+            status_response = crew_ai_service.update_gist_status(user_id, gist_id)
+            
+            # Log the notification
+            logger.info(f"CrewAI service notified about new gist: {status_response}")
+            
+            # Include notification status in the response
+            return jsonify({
+                "message": "Gist added successfully and CrewAI service notified", 
+                "gist": gist_data,
+                "notification": status_response
+            }), 201
+            
+        except Exception as e:
+            # Log the error but don't fail the gist creation
+            logger.error(f"Error notifying CrewAI service: {str(e)}")
+            
+            # Return success response with notification error
+            return jsonify({
+                "message": "Gist added successfully but failed to notify CrewAI service", 
+                "gist": gist_data,
+                "notification_error": str(e)
+            }), 201
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500 
+        logger.error(f"Error adding gist: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@links_bp.route('/api/gists/notify-crew-ai/<user_id>/<gist_id>', methods=['POST'])
+def notify_crew_ai(user_id, gist_id):
+    """
+    Notify the CrewAI service about a gist update using the signal-based API.
+    
+    This endpoint is specifically for notifying the CrewAI service about gist updates.
+    It will fail if the CrewAI service is unavailable, unlike the add_gist endpoint
+    which continues even if notification fails.
+    
+    Args:
+        user_id: The user ID
+        gist_id: The gist ID
+        
+    Returns:
+        A JSON response with the result
+    """
+    try:
+        # First, check if the gist exists
+        doc_ref = db.collection('users').document(user_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            return jsonify({"error": "User not found"}), 404
+            
+        user_data = doc.to_dict()
+        gist_exists = False
+        
+        if 'gists' in user_data:
+            for gist in user_data['gists']:
+                if gist.get('gistId') == gist_id:
+                    gist_exists = True
+                    break
+                    
+        if not gist_exists:
+            return jsonify({"error": "Gist not found"}), 404
+        
+        # Import here to avoid circular imports
+        from Firebase.services import CrewAIService
+        
+        # Initialize the CrewAI service client
+        crew_ai_service = CrewAIService()
+        
+        # Call the CrewAI service to update the gist status using signal-based approach
+        status_response = crew_ai_service.update_gist_status(user_id, gist_id)
+        
+        # Log the notification
+        logger.info(f"CrewAI service notified about gist update: {status_response}")
+        
+        # Check if the response indicates success
+        if isinstance(status_response, dict) and status_response.get('success') is False:
+            error_message = status_response.get('message', 'Unknown error')
+            raise Exception(error_message)
+        
+        return jsonify({
+            "message": "CrewAI service notified successfully", 
+            "response": status_response
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error notifying CrewAI service: {str(e)}")
+        return jsonify({
+            "error": f"Service unavailable: {str(e)}"
+        }), 503  # Service Unavailable 
