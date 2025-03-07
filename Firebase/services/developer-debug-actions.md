@@ -9,14 +9,14 @@ We'll update the `update_gist_status` method in `crew_ai_service.py` to use the 
 
 ```python
 def update_gist_status(self, user_id: str, gist_id: str, 
-                      in_production: bool = None, production_status: str = None) -> Dict:
+                      inProduction: bool = None, production_status: str = None) -> Dict:
     """
     Update the status of a gist using the signal-based API.
     
     Args:
         user_id: The user ID
         gist_id: The gist ID to update
-        in_production: Ignored (kept for backward compatibility)
+        inProduction: Ignored (kept for backward compatibility)
         production_status: Ignored (kept for backward compatibility)
             
     Returns:
@@ -107,18 +107,18 @@ def notify_crew_ai(user_id, gist_id):
 ```
 
 ### Step 3: Update the Batch Update Method
-We'll also update the `batch_update_gists` method in `crew_ai_service.py` to match the API documentation:
+We'll update the `batch_update_gists` method in `crew_ai_service.py` to match the API documentation:
 
 ```python
 def batch_update_gists(self, user_id: str, gist_ids: List[str],
-                      in_production: bool = True, production_status: str = "review") -> Dict:
+                      inProduction: bool = True, production_status: str = "review") -> Dict:
     """
     Update the status of multiple gists.
     
     Args:
         user_id: The user ID
         gist_ids: List of gist IDs to update
-        in_production: Whether the gists are in production
+        inProduction: Whether the gists are in production
         production_status: Current production status (must be one of: draft, review, published)
             
     Returns:
@@ -133,7 +133,7 @@ def batch_update_gists(self, user_id: str, gist_ids: List[str],
     
     data = {
         "gistIds": gist_ids,
-        "inProduction": in_production,
+        "inProduction": inProduction,
         "production_status": production_status
     }
     
@@ -153,7 +153,7 @@ We'll update the `update_gist_with_links` method in `crew_ai_service.py` to matc
 
 ```python
 def update_gist_with_links(self, user_id: str, gist_id: str, links: List[Dict],
-                          in_production: bool = True, production_status: str = "review") -> Dict:
+                          inProduction: bool = True, production_status: str = "review") -> Dict:
     """
     Update a gist with links and status.
     
@@ -161,7 +161,7 @@ def update_gist_with_links(self, user_id: str, gist_id: str, links: List[Dict],
         user_id: The user ID
         gist_id: The gist ID to update
         links: List of link objects to add to the gist
-        in_production: Whether the gist is in production
+        inProduction: Whether the gist is in production
         production_status: Current production status (must be one of: draft, review, published)
             
     Returns:
@@ -176,7 +176,7 @@ def update_gist_with_links(self, user_id: str, gist_id: str, links: List[Dict],
     
     data = {
         "links": links,
-        "inProduction": in_production,
+        "inProduction": inProduction,
         "production_status": production_status
     }
     

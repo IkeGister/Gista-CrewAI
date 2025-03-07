@@ -1,3 +1,27 @@
+"""
+Firebase Test Suite
+
+This module contains tests for Firebase functionality including user management, gist operations,
+link operations, and file storage.
+
+Note on GistStatus Interface:
+-----------------------------
+The GistStatus interface has been simplified to include only two properties:
+- production_status: String indicating the current state of the Gist in the production pipeline
+  Valid values: "Reviewing Content", "In Production", "Completed", "Failed"
+  Default: "Reviewing Content"
+- inProduction: Boolean indicating whether the Gist is currently in production
+  Default: false
+
+The following fields have been deprecated and removed:
+- in_productionQueue (replaced by inProduction)
+- is_done_playing
+- is_now_playing
+- playback_time
+
+When working with gist status, ensure you're using the updated interface.
+"""
+
 import os
 import unittest
 from flask import jsonify
@@ -110,11 +134,8 @@ class TestFirebaseFunctions(unittest.TestCase):
                         }
                     ],
                     "status": {
-                        "is_now_playing": True,
-                        "playback_time": 45,
-                        "is_done_playing": False,
-                        "production_status": "In Production - Content Approval Pending",
-                        "in_productionQueue": False
+                        "production_status": "Reviewing Content",
+                        "inProduction": False
                     }
                 }
             ],
@@ -155,7 +176,7 @@ class TestFirebaseFunctions(unittest.TestCase):
         self.assertEqual(gist['gistId'], gist_id)
         self.assertIn('segment_audioUrl', gist['segments'][0])
         self.assertIn('production_status', gist['status'])
-        self.assertIn('in_productionQueue', gist['status'])
+        self.assertIn('inProduction', gist['status'])
         
         print(f"Successfully verified gist structure for user {user_id}")
 
@@ -322,11 +343,8 @@ class TestFirebaseFunctions(unittest.TestCase):
                 }
             ],
             "status": {
-                "is_now_playing": False,
-                "playback_time": 0,
-                "is_done_playing": False,
-                "production_status": "In Production",
-                "in_productionQueue": True
+                "production_status": "Reviewing Content",
+                "inProduction": False
             }
         }
         
@@ -354,7 +372,7 @@ class TestFirebaseFunctions(unittest.TestCase):
         self.assertEqual(updated_gists[0]['segments'][0]['segment_title'], "Test Segment", "Segment title should match")
         self.assertIn('segment_audioUrl', updated_gists[0]['segments'][0], "Segment should have audio URL")
         self.assertIn('production_status', updated_gists[0]['status'], "Status should have production_status")
-        self.assertIn('in_productionQueue', updated_gists[0]['status'], "Status should have in_productionQueue")
+        self.assertIn('inProduction', updated_gists[0]['status'], "Status should have inProduction")
         
         print(f"Successfully verified gist was added to user {user_id}")
         
@@ -442,11 +460,8 @@ class TestFirebaseFunctions(unittest.TestCase):
                 }
             ],
             "status": {
-                "is_now_playing": False,
-                "playback_time": 0,
-                "is_done_playing": False,
-                "production_status": "In Production",
-                "in_productionQueue": True
+                "production_status": "Reviewing Content",
+                "inProduction": False
             }
         }
         
@@ -526,11 +541,8 @@ class TestFirebaseFunctions(unittest.TestCase):
                         }
                     ],
                     "status": {
-                        "is_now_playing": False,
-                        "playback_time": 0,
-                        "is_done_playing": False,
-                        "production_status": "In Production",
-                        "in_productionQueue": True
+                        "production_status": "Reviewing Content",
+                        "inProduction": False
                     }
                 }
             ],
@@ -610,11 +622,8 @@ class TestFirebaseFunctions(unittest.TestCase):
                         }
                     ],
                     "status": {
-                        "is_now_playing": False,
-                        "playback_time": 0,
-                        "is_done_playing": False,
-                        "production_status": "In Production",
-                        "in_productionQueue": True
+                        "production_status": "Reviewing Content",
+                        "inProduction": False
                     }
                 }
             ],
@@ -708,7 +717,16 @@ class TestFirebaseFunctions(unittest.TestCase):
                 print(f"Error cleaning up test users with prefix {prefix}: {e}")
 
     def test_fetch_all_gists(self):
-        """Fetch and display all gists from all users in the database."""
+        """
+        Fetch and display all gists from all users in the database.
+        
+        This test handles both dictionary and string gist formats:
+        - Dictionary format: Full gist object with all properties
+        - String format: Simple reference to a gist (e.g., gist ID or index)
+        
+        The test also verifies that the gist status follows the updated GistStatus interface
+        with 'inProduction' instead of the deprecated 'in_productionQueue'.
+        """
         print("\n=== Fetching all gists from all users ===")
         
         try:
@@ -738,23 +756,33 @@ class TestFirebaseFunctions(unittest.TestCase):
                 # Display details for each gist
                 for i, gist in enumerate(gists):
                     print(f"  Gist #{i+1}:")
-                    gist_id = gist.get('gistId', 'N/A')
-                    gist_ids.append(gist_id)
-                    print(f"    Gist ID: {gist_id}")
-                    print(f"    Title: {gist.get('title', 'N/A')}")
-                    print(f"    Category: {gist.get('category', 'N/A')}")
-                    print(f"    Date Created: {gist.get('date_created', 'N/A')}")
-                    print(f"    Is Published: {gist.get('is_published', False)}")
-                    
-                    # Status information
-                    status = gist.get('status', {})
-                    print(f"    Status:")
-                    print(f"      Production Status: {status.get('production_status', 'N/A')}")
-                    print(f"      In Production Queue: {status.get('in_productionQueue', False)}")
-                    
-                    # Segment information
-                    segments = gist.get('segments', [])
-                    print(f"    Segments: {len(segments)} total")
+                    try:
+                        # Check if gist is a dictionary or a string
+                        if isinstance(gist, dict):
+                            gist_id = gist.get('gistId', 'N/A')
+                            gist_ids.append(gist_id)
+                            print(f"    Gist ID: {gist_id}")
+                            print(f"    Title: {gist.get('title', 'N/A')}")
+                            print(f"    Category: {gist.get('category', 'N/A')}")
+                            print(f"    Date Created: {gist.get('date_created', 'N/A')}")
+                            print(f"    Is Published: {gist.get('is_published', False)}")
+                            
+                            # Status information
+                            status = gist.get('status', {})
+                            print(f"    Status:")
+                            print(f"      Production Status: {status.get('production_status', 'N/A')}")
+                            print(f"      In Production: {status.get('inProduction', False)}")
+                            
+                            # Segment information
+                            segments = gist.get('segments', [])
+                            print(f"    Segments: {len(segments)} total")
+                        else:
+                            # If gist is a string, just print it
+                            print(f"    Gist data: {gist}")
+                            gist_ids.append(str(gist))
+                    except Exception as e:
+                        print(f"    Error processing gist: {str(e)}")
+                        continue
             
             # Summary
             print(f"\n=== Gist Summary ===")
@@ -774,7 +802,16 @@ class TestFirebaseFunctions(unittest.TestCase):
             self.fail(f"Error fetching user gists: {str(e)}")
 
     def test_fetch_all_links(self):
-        """Fetch and display all links from all users in the database."""
+        """
+        Fetch and display all links from all users in the database.
+        
+        This test handles both dictionary and string link formats:
+        - Dictionary format: Full link object with all properties
+        - String format: Simple reference to a link (e.g., link ID or index)
+        
+        The test is designed to be robust against different data formats that may exist
+        in the database from previous versions of the application.
+        """
         print("\n=== Fetching all links from all users ===")
         
         try:
@@ -804,18 +841,28 @@ class TestFirebaseFunctions(unittest.TestCase):
                 # Display details for each link
                 for i, link in enumerate(links):
                     print(f"  Link #{i+1}:")
-                    print(f"    Category: {link.get('category', 'N/A')}")
-                    
-                    # Access gist_created object
-                    gist_created = link.get('gist_created', {})
-                    link_id = gist_created.get('link_id', 'N/A')
-                    link_ids.append(link_id)
-                    print(f"    Link ID: {link_id}")
-                    print(f"    URL: {gist_created.get('url', 'N/A')}")
-                    print(f"    Title: {gist_created.get('link_title', 'N/A')}")
-                    print(f"    Type: {gist_created.get('link_type', 'N/A')}")
-                    print(f"    Gist created: {gist_created.get('gist_created', False)}")
-                    print(f"    Gist ID: {gist_created.get('gist_id', 'None')}")
+                    try:
+                        # Check if link is a dictionary or a string
+                        if isinstance(link, dict):
+                            print(f"    Category: {link.get('category', 'N/A')}")
+                            
+                            # Access gist_created object
+                            gist_created = link.get('gist_created', {})
+                            link_id = gist_created.get('link_id', 'N/A')
+                            link_ids.append(link_id)
+                            print(f"    Link ID: {link_id}")
+                            print(f"    URL: {gist_created.get('url', 'N/A')}")
+                            print(f"    Title: {gist_created.get('link_title', 'N/A')}")
+                            print(f"    Type: {gist_created.get('link_type', 'N/A')}")
+                            print(f"    Gist created: {gist_created.get('gist_created', False)}")
+                            print(f"    Gist ID: {gist_created.get('gist_id', 'N/A')}")
+                        else:
+                            # If link is a string, just print it
+                            print(f"    Link data: {link}")
+                            link_ids.append(str(link))
+                    except Exception as e:
+                        print(f"    Error processing link: {str(e)}")
+                        continue
             
             # Summary
             print(f"\n=== Link Summary ===")

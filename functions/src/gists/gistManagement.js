@@ -44,10 +44,12 @@ router.post('/add/:user_id', async (req, res) => {
                 playback_duration: segment.duration?.toString() || "0",
                 segment_index: (segment.index !== undefined) ? segment.index : index.toString()
             })),
-            // Status should match database structure exactly
+            // Handle status fields properly
             status: {
-                production_status: gistData.production_status || 'pending',
-                in_productionQueue: gistData.in_productionQueue || false
+                // Use status object if provided, otherwise use individual fields or defaults
+                production_status: gistData.status?.production_status || gistData.production_status || 'Reviewing Content',
+                // Use inProduction with fallback to in_productionQueue for backward compatibility
+                inProduction: gistData.status?.inProduction ?? gistData.inProduction ?? gistData.status?.in_productionQueue ?? gistData.in_productionQueue ?? false
             },
             users: gistData.users || 0
         };
@@ -113,19 +115,22 @@ router.put('/update/:user_id/:gist_id', async (req, res) => {
 
         // Update status fields
         const currentGist = userData.gists[gistIndex];
+        
+        // Handle status updates with proper field migration
+        const updatedStatus = {
+            // Use inProduction with fallback to in_productionQueue for backward compatibility
+            inProduction: updates.status?.inProduction ?? currentGist.status?.inProduction ?? currentGist.status?.in_productionQueue ?? false,
+            // Use production_status with a default value
+            production_status: updates.status?.production_status ?? currentGist.status?.production_status ?? "Reviewing Content"
+        };
+        
+        // Create updated gist with clean status object (no deprecated fields)
         userData.gists[gistIndex] = {
             ...currentGist,
-            status: {
-                ...currentGist.status,
-                is_done_playing: updates.is_done_playing ?? currentGist.status.is_done_playing,
-                is_now_playing: updates.is_now_playing ?? currentGist.status.is_now_playing,
-                playback_time: updates.playback_time ?? currentGist.status.playback_time,
-                in_productionQueue: updates.in_productionQueue ?? currentGist.status.in_productionQueue,
-                production_status: updates.production_status ?? currentGist.status.production_status
-            },
-            is_played: updates.is_played ?? currentGist.is_played,
-            ratings: updates.ratings ?? currentGist.ratings,
-            users: updates.users ?? currentGist.users
+            status: updatedStatus,
+            is_played: updates.is_played ?? currentGist.is_played ?? false,
+            ratings: updates.ratings ?? currentGist.ratings ?? 0,
+            users: updates.users ?? currentGist.users ?? 0
         };
 
         await userRef.update({

@@ -47,7 +47,7 @@ We updated all endpoint paths in `crew_ai_service.py` to include the `/api` pref
 
 ```python
 def update_gist_status(self, user_id: str, gist_id: str, 
-                      in_production: bool, production_status: str) -> Dict:
+                      inProduction: bool, production_status: str) -> Dict:
     # ...
     return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/status', data=data)
 ```

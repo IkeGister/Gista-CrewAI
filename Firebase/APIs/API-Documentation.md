@@ -233,14 +233,13 @@ This document outlines the APIs for the Gista application, including authenticat
             "ratings": 0,
             "segments": [{
               "segment_audioUrl": "https://example.com/audio.mp3",
-              "segment_duration": 120,
+              "playback_duration": 120,
               "segment_index": 0,
               "segment_title": "Test Segment"
             }],
             "status": {
-              "is_done_playing": false,
-              "is_now_playing": false,
-              "playback_time": 0
+              "inProduction": false,
+              "production_status": "Reviewing Content",
             },
             "users": 0
           }
@@ -258,9 +257,8 @@ This document outlines the APIs for the Gista application, including authenticat
     ```json
     {
       "status": {
-        "is_done_playing": true,
-        "is_now_playing": false,
-        "playback_time": 120
+        "inProduction": true,
+        "production_status": "In Production"
       },
       "is_played": true,
       "ratings": 4

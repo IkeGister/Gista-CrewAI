@@ -140,14 +140,14 @@ class CrewAIService:
         return self._make_request('GET', f'/api/gists/{user_id}/{gist_id}')
     
     def update_gist_status(self, user_id: str, gist_id: str, 
-                          in_production: bool = None, production_status: str = None) -> Dict:
+                          inProduction: bool = None, production_status: str = None) -> Dict:
         """
         Update the status of a gist using the signal-based API.
         
         Args:
             user_id: The user ID
             gist_id: The gist ID to update
-            in_production: Ignored (kept for backward compatibility)
+            inProduction: Ignored (kept for backward compatibility)
             production_status: Ignored (kept for backward compatibility)
             
         Returns:
@@ -162,22 +162,17 @@ class CrewAIService:
             return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/status', data=data)
         except Exception as e:
             logger.error(f"Error updating gist status: {str(e)}")
-            # Return a standardized error response
-            return {
-                "success": False,
-                "error": "Failed to update gist status",
-                "message": str(e)
-            }
+            return {"error": str(e)}
         
     def batch_update_gists(self, user_id: str, gist_ids: List[str],
-                          in_production: bool = True, production_status: str = "review") -> Dict:
+                          inProduction: bool = True, production_status: str = "review") -> Dict:
         """
         Update the status of multiple gists.
         
         Args:
             user_id: The user ID
             gist_ids: List of gist IDs to update
-            in_production: Whether the gists are in production
+            inProduction: Whether the gists are in production
             production_status: Current production status (must be one of: draft, review, published)
             
         Returns:
@@ -192,22 +187,18 @@ class CrewAIService:
         
         data = {
             "gistIds": gist_ids,
-            "inProduction": in_production,
+            "inProduction": inProduction,
             "production_status": production_status
         }
         
         try:
             return self._make_request('PUT', f'/api/gists/{user_id}/batch/status', data=data)
         except Exception as e:
-            logger.error(f"Error batch updating gist status: {str(e)}")
-            return {
-                "success": False,
-                "error": "Failed to update gist status",
-                "message": str(e)
-            }
+            logger.error(f"Error batch updating gists: {str(e)}")
+            return {"error": str(e)}
     
     def update_gist_with_links(self, user_id: str, gist_id: str, links: List[Dict],
-                              in_production: bool = True, production_status: str = "review") -> Dict:
+                              inProduction: bool = True, production_status: str = "review") -> Dict:
         """
         Update a gist with links and status.
         
@@ -215,7 +206,7 @@ class CrewAIService:
             user_id: The user ID
             gist_id: The gist ID to update
             links: List of link objects to add to the gist
-            in_production: Whether the gist is in production
+            inProduction: Whether the gist is in production
             production_status: Current production status (must be one of: draft, review, published)
             
         Returns:
@@ -230,7 +221,7 @@ class CrewAIService:
         
         data = {
             "links": links,
-            "inProduction": in_production,
+            "inProduction": inProduction,
             "production_status": production_status
         }
         
@@ -238,8 +229,4 @@ class CrewAIService:
             return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/with-links', data=data)
         except Exception as e:
             logger.error(f"Error updating gist with links: {str(e)}")
-            return {
-                "success": False,
-                "error": "Failed to update gist with links",
-                "message": str(e)
-            } 
+            return {"error": str(e)} 

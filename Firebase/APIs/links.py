@@ -149,28 +149,29 @@ def add_gist(user_id):
         # Set initial status if not provided
         if 'status' not in gist_data:
             gist_data['status'] = {
-                'in_productionQueue': False,
-                'production_status': 'Pending',
-                'is_done_playing': False,
-                'playback_time': 0,
-                'is_now_playing': False
+                'inProduction': False,
+                'production_status': 'Reviewing Content',
             }
         else:
             # Ensure all status fields are present
-            if 'in_productionQueue' not in gist_data['status']:
-                gist_data['status']['in_productionQueue'] = False
+            if 'inProduction' not in gist_data['status']:
+                gist_data['status']['inProduction'] = False
                 
             if 'production_status' not in gist_data['status']:
-                gist_data['status']['production_status'] = 'Pending'
+                gist_data['status']['production_status'] = 'Reviewing Content'
                 
-            if 'is_done_playing' not in gist_data['status']:
-                gist_data['status']['is_done_playing'] = False
+            # Remove deprecated fields if they exist
+            if 'in_productionQueue' in gist_data['status']:
+                gist_data['status']['inProduction'] = gist_data['status'].pop('in_productionQueue')
                 
-            if 'playback_time' not in gist_data['status']:
-                gist_data['status']['playback_time'] = 0
+            if 'is_done_playing' in gist_data['status']:
+                gist_data['status'].pop('is_done_playing')
                 
-            if 'is_now_playing' not in gist_data['status']:
-                gist_data['status']['is_now_playing'] = False
+            if 'playback_time' in gist_data['status']:
+                gist_data['status'].pop('playback_time')
+                
+            if 'is_now_playing' in gist_data['status']:
+                gist_data['status'].pop('is_now_playing')
         
         # Ensure segments are properly formatted
         if 'segments' not in gist_data:

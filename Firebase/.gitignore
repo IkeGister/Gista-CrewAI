@@ -38,3 +38,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug and example files
+services/co-agent-debug-response.md
+services/Co-Agent-Debug-Request.md
+services/developer-debug-actions.md

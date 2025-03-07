@@ -50,16 +50,16 @@ gist = crew_ai_service.get_user_gist(user_id, gist_id)
 updated_gist = crew_ai_service.update_gist_status(
     user_id, 
     gist_id, 
-    in_production=True, 
-    production_status="in_review"
+    inProduction=True, 
+    production_status="In Production"
 )
 
 # Batch update multiple gists
 result = crew_ai_service.batch_update_gists(
     user_id, 
     gist_ids=["gist1", "gist2"], 
-    in_production=True, 
-    production_status="published"
+    inProduction=True, 
+    production_status="Completed"
 )
 
 # Update a gist with links
@@ -67,8 +67,8 @@ updated_gist = crew_ai_service.update_gist_with_links(
     user_id, 
     gist_id, 
     links=[{"url": "https://example.com", "title": "Example"}],
-    in_production=True, 
-    production_status="published"
+    inProduction=True, 
+    production_status="Completed"
 )
 ```
 
@@ -157,27 +157,27 @@ The integration between Firebase and the CrewAI service can be tested using the 
 
 1. **Add a Link**:
    ```bash
-   curl -X POST "https://us-central1-dof-ai.cloudfunctions.net/api/links/store" \
+   curl -X POST "http://localhost:5001/api/links/store" \
      -H "Content-Type: application/json" \
      -d '{"user_id":"USER_ID","link":{"category":"Category","title":"Link Title","url":"https://example.com/article"}}'
    ```
 
 2. **Create a Gist from the Link**:
    ```bash
-   curl -X POST "https://us-central1-dof-ai.cloudfunctions.net/api/gists/add/USER_ID" \
+   curl -X POST "http://localhost:5001/api/gists/add/USER_ID" \
      -H "Content-Type: application/json" \
-     -d '{"title":"Gist Title","category":"Category","link":"https://example.com/article","image_url":"https://example.com/image.jpg","link_id":"LINK_ID","segments":[{"title":"Segment Title","audioUrl":"","duration":"90","index":0}]}'
+     -d '{"gistId":"gist_123","title":"Gist Title","category":"Category","link":"https://example.com/article","image_url":"https://example.com/image.jpg","link_id":"LINK_ID","segments":[{"title":"Segment Title","audioUrl":"","duration":"90","index":0}],"status":{"production_status":"Reviewing Content","inProduction":false}}'
    ```
 
 3. **Verify the Gist Creation**:
    ```bash
-   curl -X GET "https://us-central1-dof-ai.cloudfunctions.net/api/gists/USER_ID" \
+   curl -X GET "http://localhost:5001/api/gists/USER_ID" \
      -H "Content-Type: application/json"
    ```
 
 4. **Verify the Link Update**:
    ```bash
-   curl -X GET "https://us-central1-dof-ai.cloudfunctions.net/api/links/USER_ID" \
+   curl -X GET "http://localhost:5001/api/links/USER_ID" \
      -H "Content-Type: application/json"
    ```
 

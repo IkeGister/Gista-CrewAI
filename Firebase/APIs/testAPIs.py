@@ -1,3 +1,27 @@
+"""
+Firebase API Test Suite
+
+This module contains tests for the Firebase API endpoints including authentication,
+link operations, gist operations, and CrewAI service integration.
+
+Note on GistStatus Interface:
+-----------------------------
+The GistStatus interface has been simplified to include only two properties:
+- production_status: String indicating the current state of the Gist in the production pipeline
+  Valid values: "Reviewing Content", "In Production", "Completed", "Failed"
+  Default: "Reviewing Content"
+- inProduction: Boolean indicating whether the Gist is currently in production
+  Default: false
+
+The following fields have been deprecated and removed:
+- in_productionQueue (replaced by inProduction)
+- is_done_playing
+- is_now_playing
+- playback_time
+
+When working with gist status, ensure you're using the updated interface.
+"""
+
 import unittest
 from flask import Flask
 from Firebase.APIs.auth import auth_bp
@@ -8,6 +32,7 @@ from firebase_admin import credentials, auth
 import os
 from dotenv import load_dotenv
 from firebase_admin import firestore
+import uuid
 
 class FirebaseAPITestCase(unittest.TestCase):
     @classmethod
@@ -150,7 +175,13 @@ class FirebaseAPITestCase(unittest.TestCase):
         self.assertIn("Link updated successfully", update_response.get_data(as_text=True))
 
     def test_gist_operations(self):
-        """Test gist-related operations"""
+        """
+        Test gist-related operations
+        
+        This test verifies that gist operations work correctly with the updated
+        GistStatus interface that uses 'inProduction' instead of 'in_productionQueue'
+        and has removed the deprecated fields.
+        """
         # Ensure the user exists
         if not self.test_user_ref.get().exists:
             self.test_user_ref.set({
@@ -163,19 +194,25 @@ class FirebaseAPITestCase(unittest.TestCase):
         # Test adding a new gist
         gist_data = {
             "title": "Audio Gist Title",
-            "imageUrl": "https://example.com/gist-image.jpg",
+            "image_url": "https://example.com/gist-image.jpg",
+            "link": "https://example.com/article",
+            "category": "Technology",
+            "link_id": "link_" + str(uuid.uuid4()).replace("-", ""),
             "isFinished": True,
             "playbackDuration": 300,
             "playbackTime": 120,
             "segments": [
                 {
-                    "segmentId": "segmentDocId",
-                    "audioUrl": "https://example.com/audio.mp3",
                     "title": "Segment Title",
-                    "duration": 60,
-                    "segmentIndex": 0
+                    "audioUrl": "https://example.com/audio.mp3",
+                    "duration": "60",
+                    "index": 0
                 }
-            ]
+            ],
+            "status": {
+                "production_status": "Reviewing Content",
+                "inProduction": False
+            }
         }
         
         add_response = self.client.post(
@@ -205,15 +242,35 @@ class FirebaseAPITestCase(unittest.TestCase):
         self.assertEqual(update_response.json()["message"], "Gist added successfully")
         
     def test_crew_ai_notification(self):
-        """Test notification to CrewAI service via add_gist endpoint"""
-        # Create a gist that will automatically notify the CrewAI service
+        """
+        Test notification to CrewAI service
+        
+        This test verifies that the notification to the CrewAI service works correctly
+        with the updated GistStatus interface that uses 'inProduction' instead of
+        'in_productionQueue' and has removed the deprecated fields.
+        """
+        # Create a gist with required fields
         gist_data = {
             "title": "Test Gist for CrewAI",
-            "imageUrl": "https://example.com/test-image.jpg",
+            "link": "https://example.com/test-article",
+            "category": "Technology",
+            "link_id": "link_" + str(uuid.uuid4()).replace("-", ""),
+            "image_url": "https://example.com/test-image.jpg",
             "isFinished": False,
             "playbackDuration": 180,
             "playbackTime": 0,
-            "segments": []
+            "segments": [
+                {
+                    "title": "Test Segment",
+                    "audioUrl": "https://example.com/test-audio.mp3",
+                    "duration": "60",
+                    "index": 0
+                }
+            ],
+            "status": {
+                "production_status": "Reviewing Content",
+                "inProduction": False
+            }
         }
         
         # Add the gist, which will also notify the CrewAI service

@@ -1,0 +1,5 @@
+# CrewAI Service Configuration
+CREW_AI_API_BASE_URL=https://api-yufqiolzaa-uc.a.run.app/api
+SERVICE_API_KEY=your-service-api-key-here
+API_MAX_RETRIES=3
+API_RETRY_DELAY=1 

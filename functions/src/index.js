@@ -1,10 +1,9 @@
 const functions = require("firebase-functions");
-const admin = require("firebase-admin");
 const express = require("express");
 const cors = require("cors");
 
-// Initialize Firebase Admin without service account
-admin.initializeApp();
+// Import our Firebase configuration
+const { admin, db, auth, storage } = require("./config/firebase");
 
 // Initialize Express
 const app = express();
@@ -27,7 +26,10 @@ app.use("/categories", categoryRoutes);
 
 // Simple test route
 app.get("/test", (req, res) => {
-  res.json({ message: "Express API is working!" });
+  res.json({ 
+    message: "Express API is working!",
+    firebaseConnected: !!admin && !!db
+  });
 });
 
 // Simple test function

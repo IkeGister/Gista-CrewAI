@@ -4,6 +4,8 @@ from Firebase.APIs.links import links_bp
 from Firebase.APIs.GistaAPIs import GistaAPIs
 from Firebase.config.firebase_config import FirebaseConfig  # Import your config
 from firebase_admin import firestore
+import json
+import uuid
 
 # Initialize Firebase using your existing config
 firebase_config = FirebaseConfig()
@@ -41,39 +43,107 @@ def store_link():
 @app.route('/api/gists/add/<user_id>', methods=['POST'])
 def add_gist(user_id):
     gist_data = request.json
-    response = gista_apis.update_gist(user_id, gist_data)
-    return jsonify({"message": "Gist added successfully"}), 200
+    
+    print(f"\n=== POST /api/gists/add/{user_id} ===")
+    print(f"User ID: {user_id}")
+    print(f"Request data: {json.dumps(gist_data, indent=2)}")
+    
+    try:
+        # Get the user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            return jsonify({"error": "User not found"}), 404
+            
+        # Use the provided gistId or generate a new one
+        if 'gistId' not in gist_data:
+            gist_data['gistId'] = f"gist_{uuid.uuid4().hex}"
+        
+        # Get the current gists array
+        user_data = user_doc.to_dict()
+        gists = user_data.get('gists', [])
+        
+        # Add the new gist to the array
+        gists.append(gist_data)
+        
+        # Update the user document with the new gists array
+        user_ref.update({"gists": gists})
+        
+        # Include the gist data in the response
+        response_data = {
+            "message": "Gist added successfully",
+            "gist": gist_data
+        }
+        print(f"Response: {json.dumps(response_data, indent=2)}")
+        
+        return jsonify(response_data), 200
+    except Exception as e:
+        print(f"Error adding gist: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/gists/update/<user_id>/<gist_id>', methods=['PUT'])
 def update_gist(user_id, gist_id):
     update_data = request.json
+    
+    print(f"\n=== PUT /api/gists/update/{user_id}/{gist_id} ===")
+    print(f"User ID: {user_id}")
+    print(f"Gist ID: {gist_id}")
+    print(f"Request data: {json.dumps(update_data, indent=2)}")
+    
     # For now, we can reuse the update_gist method and add gist_id to the data
     update_data["link_id"] = gist_id  # Ensure the gist_id is in the update data
     response = gista_apis.update_gist(user_id, update_data)
-    return jsonify({"message": "Gist updated successfully"}), 200
+    
+    response_data = {"message": "Gist updated successfully"}
+    print(f"Response: {json.dumps(response_data, indent=2)}")
+    
+    return jsonify(response_data), 200
 
 @app.route('/api/gists/<user_id>', methods=['GET'])
 def get_user_gists(user_id):
     # Get the link_id from query params or path - used for testing
     gist_id = request.args.get('gist_id')
     
-    # Create a mock gist based on the latest test data
-    gists = [{
-        "gistId": gist_id if gist_id else "gist_1741045766",  # Use the requested gist_id or default
-        "title": "Initial Gist Title",
-        "is_played": True,
-        "publisher": "theNewGista",
-        "ratings": 5,
-        "users": 177,
-        "status": {
-            "production_status": "In Production - Content Approval Pending",
-            "in_productionQueue": True
-        },
-        "link": "https://example.com/initial-article",
-        "category": "Technology",
-        "image_url": "https://example.com/initial-image.jpg"
-    }]
-    return jsonify({"gists": gists}), 200
+    print(f"\n=== GET /api/gists/{user_id} ===")
+    print(f"User ID: {user_id}")
+    print(f"Gist ID: {gist_id}")
+    
+    try:
+        # Get the user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            return jsonify({"error": "User not found"}), 404
+            
+        # Get the gists from the user document
+        user_data = user_doc.to_dict()
+        user_gists = user_data.get('gists', [])
+        
+        # If no gists found, return a default one for testing
+        if not user_gists:
+            # Create a mock gist based on the latest test data
+            user_gists = [{
+                "gistId": gist_id if gist_id else "gist_1741045766",  # Use the requested gist_id or default
+                "title": "Initial Gist Title",
+                "is_played": True,
+                "publisher": "theNewGista",
+                "ratings": 5,
+                "users": 177,
+                "status": {
+                    "production_status": "Reviewing Content",
+                    "inProduction": True
+                },
+                "link": "https://example.com/initial-article",
+                "category": "Technology",
+                "image_url": "https://example.com/initial-image.jpg"
+            }]
+        
+        return jsonify({"gists": user_gists}), 200
+    except Exception as e:
+        print(f"Error getting gists: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/gists/delete/<user_id>/<gist_id>', methods=['DELETE'])
 def delete_gist(user_id, gist_id):
