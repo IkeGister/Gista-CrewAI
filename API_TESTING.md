@@ -171,6 +171,132 @@ curl -X DELETE http://localhost:5001/api/auth/delete_user/test_user_123 \
   -H "Content-Type: application/json"
 ```
 
+## Testing the Auto-Create Gist Functionality
+
+The enhanced `/api/links/store` endpoint now supports automatically creating a gist when a link is stored. This can be tested using the following methods:
+
+### Using the Test Script
+
+```bash
+# Run the auto-create gist test script
+python test_auto_create_gist.py
+```
+
+This script will:
+1. Create a test user
+2. Test storing a link with `auto_create_gist=true` (default)
+3. Verify that a gist was created and the link's status was updated
+4. Test storing a link with `auto_create_gist=false`
+5. Verify that no gist was created
+6. Clean up by deleting the test user
+
+### Using cURL Commands
+
+#### Test with auto_create_gist=true (default)
+
+```bash
+# Create a test user
+curl -X POST http://localhost:5001/api/auth/create_user \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user_123",
+    "email": "test_user_123@example.com",
+    "username": "TestUser123"
+  }'
+
+# Store a link with auto_create_gist=true (default)
+curl -X POST http://localhost:5001/api/links/store \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user_123",
+    "link": {
+      "category": "Technology",
+      "gist_created": {
+        "link_title": "Test Link",
+        "url": "https://example.com/test-article",
+        "image_url": "https://example.com/test-image.jpg"
+      }
+    }
+  }'
+
+# Get the user's gists to verify the gist was created
+curl -X GET http://localhost:5001/api/gists/test_user_123 \
+  -H "Content-Type: application/json"
+
+# Get the user's links to verify the link's gist_created status was updated
+curl -X GET http://localhost:5001/api/links/test_user_123 \
+  -H "Content-Type: application/json"
+```
+
+#### Test with auto_create_gist=false
+
+```bash
+# Store a link with auto_create_gist=false
+curl -X POST http://localhost:5001/api/links/store \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user_123",
+    "link": {
+      "category": "Technology",
+      "gist_created": {
+        "link_title": "Test Link No Gist",
+        "url": "https://example.com/test-article-no-gist",
+        "image_url": "https://example.com/test-image-no-gist.jpg"
+      }
+    },
+    "auto_create_gist": false
+  }'
+
+# Get the user's gists to verify no gist was created
+curl -X GET http://localhost:5001/api/gists/test_user_123 \
+  -H "Content-Type: application/json"
+
+# Clean up by deleting the test user
+curl -X DELETE http://localhost:5001/api/auth/delete_user/test_user_123 \
+  -H "Content-Type: application/json"
+```
+
+### Expected Responses
+
+#### When auto_create_gist is true (default)
+
+```json
+{
+  "gistId": "gist_xyz789"
+}
+```
+
+#### When auto_create_gist is false
+
+```json
+{
+  "message": "Link stored successfully"
+}
+```
+
+#### Error Responses
+
+Missing required fields:
+```json
+{
+  "error": "user_id and link are required"
+}
+```
+
+Error storing link:
+```json
+{
+  "error": "Failed to store link"
+}
+```
+
+Error creating gist:
+```json
+{
+  "error": "Link stored but failed to create gist"
+}
+```
+
 ## Troubleshooting
 
 If you encounter any issues while testing the API, check the following:

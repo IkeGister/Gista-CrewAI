@@ -97,7 +97,7 @@ This document outlines the APIs for the Gista application, including authenticat
 ### 2. Links API (`/links`)
 
 #### POST https://us-central1-dof-ai.cloudfunctions.net/api/links/store
-- **Description**: Store a new link for processing into a gist.
+- **Description**: Store a new link for processing into a gist. Optionally creates a gist automatically.
 - **Request Body**:
     ```json
     {
@@ -106,30 +106,47 @@ This document outlines the APIs for the Gista application, including authenticat
         "category": "Technology",
         "url": "https://example.com/article",
         "title": "Article Title"
-      }
+      },
+      "auto_create_gist": true  // Optional, defaults to true
     }
     ```
 - **Responses**:
     - **200**: Link stored successfully
         ```json
         {
-          "message": "Link stored successfully",
-          "link": {
-            "category": "Technology",
-            "date_added": "2024-01-25T09:00:00Z",
-            "gist_created": {
-              "gist_created": false,
-              "gist_id": null,
-              "image_url": null,
-              "link_id": "link_1706201234567",
-              "link_title": "Article Title",
-              "link_type": "Web",
-              "url": "https://example.com/article"
-            }
-          }
+          "gistId": "gist_9876543210"
         }
         ```
-    - **500**: Error storing link
+        or (if auto_create_gist is false)
+        ```json
+        {
+          "message": "Link stored successfully"
+        }
+        ```
+    - **400**: Missing required fields
+        ```json
+        {
+          "error": "user_id and link are required"
+        }
+        ```
+    - **500**: Error storing link or creating gist
+        ```json
+        {
+          "error": "Failed to store link"
+        }
+        ```
+        or
+        ```json
+        {
+          "error": "Link stored but failed to create gist"
+        }
+        ```
+- **Notes**:
+    - When `auto_create_gist` is true, the endpoint will automatically create a gist from the link
+    - The gist will have default values for required fields and empty segments to be filled by CrewAI
+    - The link's `gist_created` status will be updated to reflect the gist creation
+    - The CrewAI service will be notified about the new gist
+    - If gist creation fails, an error response will be returned
 
 #### PUT https://us-central1-dof-ai.cloudfunctions.net/api/links/update-gist-status/:user_id/:link_id
 - **Description**: Update link's gist creation status.
@@ -269,6 +286,27 @@ This document outlines the APIs for the Gista application, including authenticat
     - **404**: User or gist not found
     - **500**: Error updating gist
 
+#### PUT https://us-central1-dof-ai.cloudfunctions.net/api/gists/:user_id/:gist_id/status
+- **Description**: Update gist production status using a signal-based approach.
+- **Parameters**:
+    - `user_id`: User's unique identifier
+    - `gist_id`: Gist's unique identifier
+- **Request Body**: Empty JSON object `{}` (signal-based approach)
+- **Responses**:
+    - **200**: Gist status updated successfully
+        ```json
+        {
+          "success": true,
+          "message": "Gist production status updated"
+        }
+        ```
+    - **404**: User or gist not found
+    - **500**: Error updating gist
+- **Notes**:
+    - This endpoint always sets `inProduction: true` and `production_status: "Reviewing Content"`
+    - No request body is needed, but if provided it will be ignored
+    - The gist must exist in the system for the update to succeed
+
 #### DELETE https://us-central1-dof-ai.cloudfunctions.net/api/gists/delete/:user_id/:gist_id
 - **Description**: Delete a specific gist from a user's gists array.
 - **Parameters**:
@@ -390,12 +428,13 @@ This document outlines the APIs for the Gista application, including authenticat
 
 1. Test the API connectivity with `GET /test`
 2. Create a test user with `POST /auth/create_user`
-3. Add a gist to the user with `POST /gists/add/:user_id`
+3. Store a link and automatically create a gist with `POST /links/store` (with `auto_create_gist=true`)
 4. Retrieve the user's gists with `GET /gists/:user_id`
-5. Update the gist with `PUT /gists/update/:user_id/:gist_id`
-6. Store a link for the user with `POST /links/store`
-7. Delete the gist with `DELETE /gists/delete/:user_id/:gist_id`
-8. Delete the user with `DELETE /auth/delete_user/:user_id`
+5. Retrieve the user's links with `GET /links/:user_id`
+6. Store another link without creating a gist with `POST /links/store` (with `auto_create_gist=false`)
+7. Update the gist status using the signal-based approach with `PUT /gists/:user_id/:gist_id/status`
+8. Delete the gist with `DELETE /gists/delete/:user_id/:gist_id`
+9. Delete the user with `DELETE /auth/delete_user/:user_id`
 
 ## Security
 - Firebase Authentication for user management

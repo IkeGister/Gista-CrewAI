@@ -16,7 +16,7 @@ gista_apis = GistaAPIs()
 
 # Register Blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
-app.register_blueprint(links_bp, url_prefix='/api/links')
+app.register_blueprint(links_bp)  # Changed to use the full path in the blueprint
 
 @app.route('/api/auth/signin', methods=['POST'])
 def signin():
@@ -32,13 +32,6 @@ def signin():
     except Exception as e:
         print(f"Error in signin: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-@app.route('/api/links/store', methods=['POST'])
-def store_link():
-    user_id = request.json.get('user_id')
-    link = request.json.get('link')
-    response = gista_apis.update_link(user_id, link)
-    return jsonify({"message": "Link stored successfully"}), 200
 
 @app.route('/api/gists/add/<user_id>', methods=['POST'])
 def add_gist(user_id):

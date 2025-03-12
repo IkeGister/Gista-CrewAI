@@ -43,16 +43,103 @@ def store_link():
     data = request.json
     user_id = data.get('user_id')
     link = data.get('link')
+    auto_create_gist = data.get('auto_create_gist', True)  # Default to true
 
     if not user_id or not link:
         return jsonify({"error": "user_id and link are required"}), 400
 
-    # Store the link in Firestore
-    db.collection('users').document(user_id).update({
-        'links': firestore.ArrayUnion([link])
-    })
+    # Generate a unique link_id if not provided
+    if 'gist_created' not in link:
+        link['gist_created'] = {}
+    if 'link_id' not in link.get('gist_created', {}):
+        link['gist_created']['link_id'] = f"link_{uuid.uuid4().hex}"
 
-    return jsonify({"message": "Link stored successfully"}), 200
+    try:
+        # Store the link in Firestore
+        db.collection('users').document(user_id).update({
+            'links': firestore.ArrayUnion([link])
+        })
+    except Exception as e:
+        logger.error(f"Error storing link: {str(e)}")
+        return jsonify({"error": "Failed to store link"}), 500
+
+    # If auto_create_gist is enabled, create a gist from the link
+    gist_id = None
+    
+    if auto_create_gist:
+        try:
+            # Prepare gist data from the link
+            gist_data = {
+                'gistId': f"gist_{uuid.uuid4().hex}",
+                'title': link.get('gist_created', {}).get('link_title', "Untitled Gist"),
+                'image_url': link.get('gist_created', {}).get('image_url', ""),
+                'link': link.get('gist_created', {}).get('url', ""),
+                'category': link.get('category', "Uncategorized"),
+                'link_id': link.get('gist_created', {}).get('link_id'),
+                'segments': [],  # Empty segments to be filled by CrewAI
+                'is_published': True,
+                'is_played': False,
+                'playback_duration': 0,
+                'publisher': "theNewGista",
+                'ratings': 0,
+                'users': 0,
+                'date_created': datetime.now().isoformat() + 'Z',
+                'status': {
+                    'inProduction': False,
+                    'production_status': 'Reviewing Content',
+                }
+            }
+            
+            gist_id = gist_data['gistId']
+
+            # Add the gist to Firebase
+            db.collection('users').document(user_id).update({
+                'gists': firestore.ArrayUnion([gist_data])
+            })
+
+            # Update the link to indicate a gist was created
+            # Get the current user data
+            doc_ref = db.collection('users').document(user_id)
+            doc = doc_ref.get()
+            user_data = doc.to_dict()
+            
+            # Find the link we just added and update its gist_created status
+            for i, user_link in enumerate(user_data.get('links', [])):
+                if user_link.get('gist_created', {}).get('link_id') == link.get('gist_created', {}).get('link_id'):
+                    user_data['links'][i]['gist_created']['gist_created'] = True
+                    user_data['links'][i]['gist_created']['gist_id'] = gist_id
+                    break
+            
+            # Update the user document
+            doc_ref.set(user_data)
+
+            # Notify the CrewAI service about the new gist
+            try:
+                # Import here to avoid circular imports
+                from Firebase.services import CrewAIService
+                
+                # Initialize the CrewAI service client
+                crew_ai_service = CrewAIService()
+                
+                # Call the CrewAI service to update the gist status using signal-based approach
+                crew_ai_service.update_gist_status(user_id, gist_id)
+                
+                # Log the notification
+                logger.info(f"CrewAI service notified about new gist: {gist_id}")
+            except Exception as e:
+                # Log the error but don't fail the gist creation
+                logger.error(f"Error notifying CrewAI service: {str(e)}")
+        except Exception as e:
+            # Log the error but don't fail the link creation
+            logger.error(f"Error auto-creating gist: {str(e)}")
+            return jsonify({"error": "Link stored but failed to create gist"}), 500
+
+    # Ultra-minimal response with just the gistId if created
+    if auto_create_gist and gist_id:
+        return jsonify({"gistId": gist_id}), 200
+    else:
+        # If auto_create_gist was false, just return a success message
+        return jsonify({"message": "Link stored successfully"}), 200
 
 @links_bp.route('/api/links/<user_id>', methods=['GET'])
 def get_links(user_id):

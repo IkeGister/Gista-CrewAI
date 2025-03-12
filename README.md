@@ -97,7 +97,29 @@ Request body:
     "linkType": "weblink",
     "categoryId": "category123",
     "categoryName": "Technology"
-  }
+  },
+  "auto_create_gist": true  // Optional, defaults to true
+}
+```
+
+**Note**: The enhanced `/api/links/store` endpoint now supports automatically creating a gist when a link is stored. When `auto_create_gist` is set to `true` (default), the endpoint will:
+1. Store the link in the user's profile
+2. Create a gist from the link with default values
+3. Update the link's `gist_created` status
+4. Notify the CrewAI service about the new gist
+5. Return the gistId in the response
+
+Response when `auto_create_gist` is true:
+```json
+{
+  "gistId": "gist_9876543210"
+}
+```
+
+Response when `auto_create_gist` is false:
+```json
+{
+  "message": "Link stored successfully"
 }
 ```
 

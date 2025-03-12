@@ -276,3 +276,71 @@ apiClient.interceptors.response.use(
    
    - Batch update: Requires `gistIds`, `inProduction`, and `production_status` fields
    - Update with links: Requires `links`, `inProduction`, and `production_status` fields
+
+### Auto-Create Gist Functionality
+
+The `/api/links/store` endpoint has been enhanced to automatically create a gist when a link is stored. This simplifies the integration workflow by reducing the number of API calls required.
+
+#### How It Works
+
+1. When a link is stored with `auto_create_gist=true` (default), the endpoint will:
+   - Store the link in the user's profile
+   - Create a gist from the link with default values
+   - Update the link's `gist_created` status
+   - Notify the CrewAI service about the new gist
+   - Return the gistId in the response
+
+2. When `auto_create_gist=false`, the endpoint will:
+   - Store the link in the user's profile
+   - Return a success message
+
+#### Example Usage
+
+```javascript
+// Node.js example with axios
+async function storeLink(userId, link, autoCreateGist = true) {
+  try {
+    const response = await apiClient.post('/links/store', {
+      user_id: userId,
+      link: link,
+      auto_create_gist: autoCreateGist
+    });
+    
+    if (autoCreateGist) {
+      // The response contains the gistId
+      const gistId = response.data.gistId;
+      console.log(`Link stored and gist created with ID: ${gistId}`);
+      return gistId;
+    } else {
+      console.log('Link stored successfully without creating a gist');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error storing link:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Example link data
+const link = {
+  category: "Technology",
+  gist_created: {
+    link_title: "Example Article",
+    url: "https://example.com/article",
+    image_url: "https://example.com/image.jpg"
+  }
+};
+
+// Store link and create gist
+const gistId = await storeLink('user123', link);
+
+// Store link without creating gist
+await storeLink('user123', link, false);
+```
+
+#### Benefits for Service Integration
+
+1. **Simplified Workflow**: Reduces the number of API calls required to create a gist from a link
+2. **Atomic Operation**: Ensures that the link and gist are created together, reducing the risk of inconsistent data
+3. **Automatic Notification**: The CrewAI service is automatically notified about the new gist
+4. **Flexible Control**: Services can choose whether to create a gist automatically or handle it separately
