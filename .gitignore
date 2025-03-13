@@ -132,3 +132,37 @@ functions/src/examples/
 Firebase/services/co-agent-debug-response.md
 Firebase/services/Co-Agent-Debug-Request.md
 Firebase/services/developer-debug-actions.md
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+*.env
+service-account.json
+*service-account*.json
+*firebase-adminsdk*.json
+firebase-credentials.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

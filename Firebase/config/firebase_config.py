@@ -17,7 +17,20 @@ class FirebaseConfig:
 
     def _initialize_firebase(self):
         """Initialize Firebase with service account file"""
-        cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), "../../functions/src/service-account.json"))
+        # Try to get service account path from environment variable
+        service_account_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
+        
+        # If not set, use the default path
+        if not service_account_path:
+            service_account_path = os.path.join(os.path.dirname(__file__), "../../functions/src/service-account.json")
+            # Check if the file exists at the default path
+            if not os.path.exists(service_account_path):
+                raise FileNotFoundError(
+                    f"Firebase service account file not found at {service_account_path}. "
+                    f"Please either place the file at this location or set the FIREBASE_SERVICE_ACCOUNT environment variable."
+                )
+        
+        cred = credentials.Certificate(service_account_path)
         
         self.app = initialize_app(cred, {
             'storageBucket': "dof-ai.firebasestorage.app"

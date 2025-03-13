@@ -26,7 +26,32 @@ Gista-CrewAI/
 │   └── .env.example           # Example environment variables
 ├── functions/                 # Test scripts and utilities
 │   └── test_crewai-backend_endpoints.py # API endpoint tests
-└── Service-Service-README.md  # Service integration documentation
+├── docs/                      # Documentation
+│   ├── api/                   # API documentation
+│   │   ├── API-Documentation.md # API endpoints documentation
+│   │   ├── SERVICE_INTEGRATION.md # Service integration documentation
+│   │   └── SERVICE_CLIENTS.md # Service client modules documentation
+│   ├── deployment/            # Deployment guides
+│   ├── testing/               # Testing documentation
+│   ├── development/           # Development notes
+│   │   └── debug/             # Debug-related documentation
+│   └── security/              # Security documentation
+├── scripts/                   # Utility scripts
+│   ├── prepare_for_deployment.sh # Deployment preparation script
+│   ├── run_all_tests.sh       # Script to run all tests
+│   └── run_tests_with_server.sh # Script to run tests with server
+├── tests/                     # Organized test suite
+│   ├── unit/                  # Unit tests
+│   │   ├── test_firebase.py   # Firebase configuration tests
+│   │   └── test_apis.py       # API endpoint tests
+│   ├── integration/           # Integration tests
+│   │   ├── test_api_live.py   # Live API tests
+│   │   └── test_auto_create_gist.py # Auto-create gist tests
+│   ├── e2e/                   # End-to-end tests
+│   │   └── test_crewai-backend_endpoints.py # Backend endpoint tests
+│   ├── run_all_tests.py       # Test runner script
+│   └── run_tests_with_server.py # Test runner with server script
+└── Service-Service-README.md  # Legacy service integration documentation
 ```
 
 ## Setup
@@ -50,6 +75,28 @@ Gista-CrewAI/
    ```
 3. Install dependencies: `pip install -r requirements.txt`
 4. Deploy to Google Cloud Functions: `firebase deploy --only functions`
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **API Documentation**: Detailed documentation of the API endpoints and their usage
+- **Deployment Guides**: Step-by-step guides for deploying the API
+- **Testing Documentation**: Guides for testing the API endpoints
+- **Development Notes**: Notes from development sessions
+- **Security Documentation**: Security-related documentation and scripts
+
+See the [Documentation Index](docs/README.md) for a complete list of available documentation.
+
+## Scripts
+
+Utility scripts are available in the `scripts/` directory:
+
+- **prepare_for_deployment.sh**: Script for preparing the codebase for deployment
+- **run_all_tests.sh**: Script for running all tests
+- **run_tests_with_server.sh**: Script for running tests that require the server
+
+See the [Scripts README](scripts/README.md) for more information.
 
 ## API Documentation
 
@@ -512,15 +559,48 @@ struct GistResponse: Codable {
 - Write unit tests for new features
 
 ## Testing
-Run the unit tests:
-```
-python -m unittest Firebase/APIs/testAPIs.py
+
+The project includes a comprehensive test suite organized into unit tests, integration tests, and end-to-end tests.
+
+### Running Tests
+
+#### Using the Test Runner with Server
+
+The `run_tests_with_server.py` script automatically starts the Flask development server, runs the tests, and then stops the server:
+
+```bash
+# Run all tests with server
+python tests/run_tests_with_server.py
+
+# Run only unit tests with server
+python tests/run_tests_with_server.py --unit
+
+# Run only integration tests with server
+python tests/run_tests_with_server.py --integration
+
+# Run only end-to-end tests with server
+python tests/run_tests_with_server.py --e2e
 ```
 
-Run the API endpoint tests:
+#### Using the Test Runner
+
+The `run_all_tests.py` script provides a convenient way to run all tests without automatically starting the server:
+
+```bash
+# Run all tests
+python tests/run_all_tests.py
+
+# Run only unit tests
+python tests/run_all_tests.py --unit
+
+# Run only integration tests
+python tests/run_all_tests.py --integration
+
+# Run only end-to-end tests
+python tests/run_all_tests.py --e2e
 ```
-python functions/test_crewai-backend_endpoints.py --verbose
-```
+
+For more information about testing, see the [tests/README.md](tests/README.md) file.
 
 ## Deployment
 1. Ensure all tests pass
