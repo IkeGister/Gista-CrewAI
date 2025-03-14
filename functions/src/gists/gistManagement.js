@@ -25,9 +25,12 @@ router.post('/add/:user_id', async (req, res) => {
             return res.status(400).json({ error: 'Segments must be a non-empty array' });
         }
 
+        // Use link_id as gistId (or generate one if not provided)
+        const gistId = link_id || `gist_${Date.now()}`;
+        
         // Create gist with structure matching the database
         const gistWithMetadata = {
-            gistId: link_id, // Use the link_id as the gistId for consistency
+            gistId: gistId,
             title: gistData.title,
             category: gistData.category,
             date_created: new Date().toISOString(),
@@ -54,33 +57,32 @@ router.post('/add/:user_id', async (req, res) => {
             users: gistData.users || 0
         };
 
-        // Add gist to user's gists array
-        await admin.firestore().collection('users').doc(user_id).update({
-            gists: admin.firestore.FieldValue.arrayUnion(gistWithMetadata)
-        });
+        // Add gist to user's gists subcollection
+        await admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .doc(gistId)
+            .set(gistWithMetadata);
 
         // Now update the corresponding link to mark the gist as created
-        const userRef = admin.firestore().collection('users').doc(user_id);
-        const userDoc = await userRef.get();
-        
-        if (userDoc.exists) {
-            const userData = userDoc.data();
-            const linkIndex = userData.links.findIndex(
-                link => link.gist_created.link_id === link_id
-            );
+        // First check if the link exists in the links subcollection
+        const linkRef = admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('links')
+            .doc(link_id);
             
-            if (linkIndex !== -1) {
-                // Update the link's gist_created status
-                userData.links[linkIndex].gist_created = {
-                    ...userData.links[linkIndex].gist_created,
-                    gist_created: true,
-                    gist_id: link_id,
-                    image_url: gistData.image_url,
-                    link_title: gistData.title || userData.links[linkIndex].gist_created.link_title
-                };
-                
-                await userRef.update({ links: userData.links });
-            }
+        const linkDoc = await linkRef.get();
+        
+        if (linkDoc.exists) {
+            // Update the link's gist_created status
+            await linkRef.update({
+                'gist_created.gist_created': true,
+                'gist_created.gist_id': gistId,
+                'gist_created.image_url': gistData.image_url,
+                'gist_created.link_title': gistData.title || linkDoc.data().gist_created.link_title
+            });
         }
 
         res.json({ 
@@ -99,22 +101,19 @@ router.put('/update/:user_id/:gist_id', async (req, res) => {
         const { user_id, gist_id } = req.params;
         const updates = req.body;
 
-        const userRef = admin.firestore().collection('users').doc(user_id);
-        const userDoc = await userRef.get();
+        const gistRef = admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .doc(gist_id);
+            
+        const gistDoc = await gistRef.get();
 
-        if (!userDoc.exists) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const userData = userDoc.data();
-        const gistIndex = userData.gists.findIndex(gist => gist.gistId === gist_id);
-
-        if (gistIndex === -1) {
+        if (!gistDoc.exists) {
             return res.status(404).json({ error: 'Gist not found' });
         }
 
-        // Update status fields
-        const currentGist = userData.gists[gistIndex];
+        const currentGist = gistDoc.data();
         
         // Handle status updates with proper field migration
         const updatedStatus = {
@@ -124,22 +123,57 @@ router.put('/update/:user_id/:gist_id', async (req, res) => {
             production_status: updates.status?.production_status ?? currentGist.status?.production_status ?? "Reviewing Content"
         };
         
-        // Create updated gist with clean status object (no deprecated fields)
-        userData.gists[gistIndex] = {
-            ...currentGist,
-            status: updatedStatus,
-            is_played: updates.is_played ?? currentGist.is_played ?? false,
-            ratings: updates.ratings ?? currentGist.ratings ?? 0,
-            users: updates.users ?? currentGist.users ?? 0
+        // Update only the specified fields or status
+        const updateData = {
+            status: updatedStatus
         };
-
-        await userRef.update({
-            gists: userData.gists
-        });
+        
+        // Add other fields if they exist in the update request
+        if (updates.is_played !== undefined) updateData.is_played = updates.is_played;
+        if (updates.ratings !== undefined) updateData.ratings = updates.ratings;
+        if (updates.users !== undefined) updateData.users = updates.users;
+        
+        await gistRef.update(updateData);
 
         res.json({ message: "Gist updated successfully" });
     } catch (error) {
         console.error('Error updating gist:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Signal-based status update endpoint
+router.put('/:user_id/:gist_id/status', async (req, res) => {
+    try {
+        const { user_id, gist_id } = req.params;
+        
+        const gistRef = admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .doc(gist_id);
+            
+        const gistDoc = await gistRef.get();
+
+        if (!gistDoc.exists) {
+            return res.status(404).json({ error: 'Gist not found' });
+        }
+
+        // Update the status to mark it as in production
+        await gistRef.update({
+            'status.inProduction': true,
+            'status.production_status': 'In Production'
+        });
+
+        res.json({ 
+            message: "Gist status updated successfully",
+            status: {
+                inProduction: true,
+                production_status: 'In Production'
+            }
+        });
+    } catch (error) {
+        console.error('Error updating gist status:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -149,46 +183,41 @@ router.delete('/delete/:user_id/:gist_id', async (req, res) => {
     try {
         const { user_id, gist_id } = req.params;
         
-        // Get the user document
-        const userRef = admin.firestore().collection('users').doc(user_id);
-        const userDoc = await userRef.get();
+        // Get reference to the gist in the subcollection
+        const gistRef = admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .doc(gist_id);
+            
+        const gistDoc = await gistRef.get();
         
-        if (!userDoc.exists) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        // Get the current gists array
-        const userData = userDoc.data();
-        const gists = userData.gists || [];
-        
-        // Find the gist index
-        const gistIndex = gists.findIndex(gist => gist.gistId === gist_id);
-        
-        // If gist not found
-        if (gistIndex === -1) {
+        if (!gistDoc.exists) {
             return res.status(404).json({ error: 'Gist not found' });
         }
         
-        // Remove the gist from the array
-        gists.splice(gistIndex, 1);
+        // Delete the gist document
+        await gistRef.delete();
         
-        // Update the user document with the modified gists array
-        await userRef.update({ gists: gists });
+        // Find and update any links that reference this gist
+        const linksSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('links')
+            .where('gist_created.gist_id', '==', gist_id)
+            .get();
         
-        // Also update any links that reference this gist
-        const links = userData.links || [];
-        let linksUpdated = false;
+        const updatePromises = [];
+        linksSnapshot.forEach(doc => {
+            updatePromises.push(doc.ref.update({
+                'gist_created.gist_created': false,
+                'gist_created.gist_id': null
+            }));
+        });
         
-        for (let i = 0; i < links.length; i++) {
-            if (links[i].gist_created && links[i].gist_created.gist_id === gist_id) {
-                links[i].gist_created.gist_created = false;
-                links[i].gist_created.gist_id = null;
-                linksUpdated = true;
-            }
-        }
-        
-        if (linksUpdated) {
-            await userRef.update({ links: links });
+        // Wait for all updates to complete
+        if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
         }
         
         res.status(200).json({ message: `Gist ${gist_id} deleted successfully` });
@@ -202,16 +231,52 @@ router.delete('/delete/:user_id/:gist_id', async (req, res) => {
 router.get('/:user_id', async (req, res) => {
     try {
         const { user_id } = req.params;
+        
+        // Check if user exists
         const userDoc = await admin.firestore().collection('users').doc(user_id).get();
-
         if (!userDoc.exists) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const userData = userDoc.data();
-        res.json({ gists: userData.gists || [] });
+        // Get all gists from subcollection
+        const gistsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .get();
+
+        const gists = [];
+        gistsSnapshot.forEach(doc => {
+            gists.push(doc.data());
+        });
+
+        res.json({ gists: gists });
     } catch (error) {
         console.error('Error fetching gists:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get specific gist
+router.get('/:user_id/:gist_id', async (req, res) => {
+    try {
+        const { user_id, gist_id } = req.params;
+        
+        const gistRef = admin.firestore()
+            .collection('users')
+            .doc(user_id)
+            .collection('gists')
+            .doc(gist_id);
+            
+        const gistDoc = await gistRef.get();
+
+        if (!gistDoc.exists) {
+            return res.status(404).json({ error: 'Gist not found' });
+        }
+
+        res.json({ gist: gistDoc.data() });
+    } catch (error) {
+        console.error('Error fetching specific gist:', error);
         res.status(500).json({ error: error.message });
     }
 });

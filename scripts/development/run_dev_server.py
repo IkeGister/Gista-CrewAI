@@ -5,12 +5,15 @@ This script runs a Flask development server for testing the API with actual HTTP
 It sets up the necessary environment and runs the app.py Flask application.
 
 Usage:
-    python run_dev_server.py
+    python scripts/development/run_dev_server.py
 """
 
 import os
 import sys
 from dotenv import load_dotenv
+
+# Add the root directory to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Load environment variables
 load_dotenv()

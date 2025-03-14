@@ -37,5 +37,9 @@ exports.helloWorld = functions.https.onRequest((req, res) => {
   res.send("Hello from Firebase!");
 });
 
-// Export the Express app as a Firebase Cloud Function
+// Export the Express app as Firebase Cloud Functions
 exports.api = functions.https.onRequest(app);
+exports.apiSubcollections = functions.https.onRequest(app);
+exports.notificationsSubcollections = functions.https.onRequest((req, res) => {
+  res.json({ message: "Notifications service is running with subcollections." });
+});

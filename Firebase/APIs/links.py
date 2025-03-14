@@ -5,6 +5,8 @@ from Firebase.config.firebase_config import FirebaseConfig
 import uuid
 from datetime import datetime
 import logging
+import os
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +42,9 @@ def handle_notification_request(request):
 
 @links_bp.route('/api/links/store', methods=['POST'])
 def store_link():
+    """
+    Store a link in the user's links subcollection
+    """
     data = request.json
     user_id = data.get('user_id')
     link = data.get('link')
@@ -51,14 +56,27 @@ def store_link():
     # Generate a unique link_id if not provided
     if 'gist_created' not in link:
         link['gist_created'] = {}
-    if 'link_id' not in link.get('gist_created', {}):
-        link['gist_created']['link_id'] = f"link_{uuid.uuid4().hex}"
+    
+    link_id = link.get('gist_created', {}).get('link_id', f"link_{uuid.uuid4().hex}")
 
     try:
-        # Store the link in Firestore
-        db.collection('users').document(user_id).update({
-            'links': firestore.ArrayUnion([link])
-        })
+        # Convert the link data to the new format for subcollection
+        subcollection_link = {
+            'id': link_id,
+            'url': link.get('gist_created', {}).get('url', ''),
+            'title': link.get('gist_created', {}).get('link_title', ''),
+            'description': link.get('description', ''),
+            'category': link.get('category', 'Uncategorized'),
+            'date_added': datetime.now().isoformat() + 'Z',
+            'inProduction': False,
+            'production_status': 'draft',
+            'updatedAt': datetime.now().isoformat() + 'Z'
+        }
+        
+        # Store the link in the links subcollection
+        db.collection('users').document(user_id).collection('links').document(link_id).set(subcollection_link)
+        logger.info(f"Stored link {link_id} in subcollection for user {user_id}")
+
     except Exception as e:
         logger.error(f"Error storing link: {str(e)}")
         return jsonify({"error": "Failed to store link"}), 500
@@ -69,305 +87,342 @@ def store_link():
     if auto_create_gist:
         try:
             # Prepare gist data from the link
+            gist_id = f"gist_{uuid.uuid4().hex}"
             gist_data = {
-                'gistId': f"gist_{uuid.uuid4().hex}",
+                'id': gist_id,
                 'title': link.get('gist_created', {}).get('link_title', "Untitled Gist"),
                 'image_url': link.get('gist_created', {}).get('image_url', ""),
                 'link': link.get('gist_created', {}).get('url', ""),
                 'category': link.get('category', "Uncategorized"),
-                'link_id': link.get('gist_created', {}).get('link_id'),
-                'segments': [],  # Empty segments to be filled by CrewAI
                 'is_published': True,
                 'is_played': False,
                 'playback_duration': 0,
                 'publisher': "theNewGista",
                 'ratings': 0,
-                'users': 0,
-                'date_created': datetime.now().isoformat() + 'Z',
+                'segments': [],  # Empty segments to be filled by CrewAI
                 'status': {
                     'inProduction': False,
                     'production_status': 'Reviewing Content',
-                }
+                },
+                'createdAt': datetime.now().isoformat() + 'Z',
+                'updatedAt': datetime.now().isoformat() + 'Z'
             }
             
-            gist_id = gist_data['gistId']
-
-            # Add the gist to Firebase
-            db.collection('users').document(user_id).update({
-                'gists': firestore.ArrayUnion([gist_data])
+            # Add the gist to the gists subcollection
+            db.collection('users').document(user_id).collection('gists').document(gist_id).set(gist_data)
+            logger.info(f"Created gist {gist_id} in subcollection for user {user_id}")
+            
+            # Update the link's gistId field to reference the gist
+            subcollection_link['gistId'] = gist_id
+            db.collection('users').document(user_id).collection('links').document(link_id).update({
+                'gistId': gist_id
             })
-
-            # Update the link to indicate a gist was created
-            # Get the current user data
-            doc_ref = db.collection('users').document(user_id)
-            doc = doc_ref.get()
-            user_data = doc.to_dict()
             
-            # Find the link we just added and update its gist_created status
-            for i, user_link in enumerate(user_data.get('links', [])):
-                if user_link.get('gist_created', {}).get('link_id') == link.get('gist_created', {}).get('link_id'):
-                    user_data['links'][i]['gist_created']['gist_created'] = True
-                    user_data['links'][i]['gist_created']['gist_id'] = gist_id
-                    break
+            # Also add the link to the gist's links subcollection
+            db.collection('users').document(user_id).collection('gists').document(gist_id).collection('links').document(link_id).set(subcollection_link)
+            logger.info(f"Added link {link_id} to gist {gist_id} subcollection")
             
-            # Update the user document
-            doc_ref.set(user_data)
-
-            # Notify the CrewAI service about the new gist
-            try:
-                # Import here to avoid circular imports
-                from Firebase.services import CrewAIService
-                
-                # Initialize the CrewAI service client
-                crew_ai_service = CrewAIService()
-                
-                # Call the CrewAI service to update the gist status using signal-based approach
-                crew_ai_service.update_gist_status(user_id, gist_id)
-                
-                # Log the notification
-                logger.info(f"CrewAI service notified about new gist: {gist_id}")
-            except Exception as e:
-                # Log the error but don't fail the gist creation
-                logger.error(f"Error notifying CrewAI service: {str(e)}")
+            # Notify CrewAI about the new gist
+            notify_crew_ai(user_id, gist_id)
+            
         except Exception as e:
-            # Log the error but don't fail the link creation
-            logger.error(f"Error auto-creating gist: {str(e)}")
-            return jsonify({"error": "Link stored but failed to create gist"}), 500
+            logger.error(f"Error creating gist from link: {str(e)}")
+            return jsonify({"error": "Failed to create gist from link"}), 500
 
-    # Ultra-minimal response with just the gistId if created
-    if auto_create_gist and gist_id:
-        return jsonify({"gistId": gist_id}), 200
-    else:
-        # If auto_create_gist was false, just return a success message
-        return jsonify({"message": "Link stored successfully"}), 200
+    response = {"message": "Link stored successfully"}
+    if gist_id:
+        response["gistId"] = gist_id
+    
+    return jsonify(response), 200
 
 @links_bp.route('/api/links/<user_id>', methods=['GET'])
 def get_links(user_id):
-    doc = db.collection('users').document(user_id).get()
-    if not doc.exists:
-        return jsonify({"error": "User not found"}), 404
-
-    return jsonify(doc.to_dict()), 200
+    """
+    Get all links for a user from the links subcollection
+    """
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+    
+    try:
+        # Query the links subcollection for the user
+        links_snapshot = db.collection('users').document(user_id).collection('links').get()
+        
+        # Convert the links to a list
+        links = [doc.to_dict() for doc in links_snapshot]
+        
+        return jsonify({"links": links}), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting links: {str(e)}")
+        return jsonify({"error": "Failed to get links"}), 500
 
 @links_bp.route('/api/links/update/<user_id>', methods=['POST'])
 def update_link(user_id):
+    """
+    Update a link in the links subcollection
+    """
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+    
     data = request.json
-    link = {
-        "linkId": str(uuid.uuid4()),  # Generate unique ID
-        "dateAdded": datetime.utcnow().isoformat(),
-        "title": data.get('title'),
-        "url": data.get('url'),
-        "imageUrl": data.get('imageUrl'),  # Optional
-        "linkType": data.get('linkType'),  # "weblink" or "pdf"
-        "category": {
-            "categoryId": data.get('categoryId'),  # Firestore document ID for the category
-            "name": data.get('categoryName')  # Name of the category
+    link_id = data.get('id')
+    
+    if not link_id:
+        return jsonify({"error": "link ID is required"}), 400
+    
+    try:
+        # Update the link in the links subcollection
+        link_ref = db.collection('users').document(user_id).collection('links').document(link_id)
+        link_doc = link_ref.get()
+        
+        if not link_doc.exists:
+            return jsonify({"error": f"Link {link_id} not found"}), 404
+        
+        # Update the link with the new data
+        update_data = {
+            'title': data.get('title', link_doc.get('title')),
+            'url': data.get('url', link_doc.get('url')),
+            'description': data.get('description', link_doc.get('description')),
+            'category': data.get('category', link_doc.get('category')),
+            'updatedAt': datetime.now().isoformat() + 'Z'
         }
-    }
-
-    # Update the user's links array in Firestore
-    db.collection('users').document(user_id).update({
-        "links": firestore.ArrayUnion([link])
-    })
-
-    return jsonify({"message": "Link updated successfully"}), 200
+        
+        link_ref.update(update_data)
+        logger.info(f"Updated link {link_id} in subcollection for user {user_id}")
+        
+        # If the link is associated with a gist, update it there too
+        gist_id = link_doc.get('gistId')
+        if gist_id:
+            gist_link_ref = db.collection('users').document(user_id).collection('gists').document(gist_id).collection('links').document(link_id)
+            if gist_link_ref.get().exists:
+                gist_link_ref.update(update_data)
+                logger.info(f"Updated link {link_id} in gist {gist_id} subcollection")
+        
+        return jsonify({"message": "Link updated successfully"}), 200
+    
+    except Exception as e:
+        logger.error(f"Error updating link: {str(e)}")
+        return jsonify({"error": "Failed to update link"}), 500
 
 @links_bp.route('/api/gists/add/<user_id>', methods=['POST'])
 def add_gist(user_id):
     """
-    Add a gist for a user and notify the CrewAI service.
-    
-    Args:
-        user_id: The user ID
-        
-    Returns:
-        A JSON response with the result
+    Add a gist to the gists subcollection
     """
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+    
+    data = request.json
+    
+    # Validate required fields
+    required_fields = ['title', 'image_url', 'link', 'category', 'segments']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"{field} is required"}), 400
+    
     try:
-        # Get the user document
-        doc_ref = db.collection('users').document(user_id)
-        doc = doc_ref.get()
-        
-        # Check if the user exists
-        if not doc.exists:
-            return jsonify({"error": "User not found"}), 404
-            
-        # Get the gist data from the request
-        gist_data = request.json
-        
         # Generate a gist ID if not provided
-        if 'gistId' not in gist_data:
-            gist_data['gistId'] = f"gist_{uuid.uuid4().hex}"
+        gist_id = data.get('gistId', f"gist_{uuid.uuid4().hex}")
         
-        # Ensure all required fields are present with default values if needed
-        if 'title' not in gist_data:
-            gist_data['title'] = "Untitled Gist"
-            
-        if 'category' not in gist_data:
-            gist_data['category'] = "Uncategorized"
-            
-        if 'is_published' not in gist_data:
-            gist_data['is_published'] = True
-            
-        if 'link' not in gist_data:
-            gist_data['link'] = ""
-            
-        if 'image_url' not in gist_data:
-            gist_data['image_url'] = ""
-            
-        if 'ratings' not in gist_data:
-            gist_data['ratings'] = 0
-            
-        if 'users' not in gist_data:
-            gist_data['users'] = 0
-            
-        if 'is_played' not in gist_data:
-            gist_data['is_played'] = False
-            
-        if 'playback_duration' not in gist_data:
-            gist_data['playback_duration'] = 0
-            
-        if 'date_created' not in gist_data:
-            gist_data['date_created'] = datetime.now().isoformat() + 'Z'
-            
-        if 'publisher' not in gist_data:
-            gist_data['publisher'] = "theNewGista"
-            
-        # Set initial status if not provided
-        if 'status' not in gist_data:
-            gist_data['status'] = {
+        # Normalize the gist data
+        gist_data = {
+            'id': gist_id,
+            'title': data.get('title'),
+            'image_url': data.get('image_url'),
+            'link': data.get('link'),
+            'category': data.get('category'),
+            'segments': data.get('segments', []),
+            'is_played': data.get('is_played', False),
+            'is_published': data.get('is_published', True),
+            'playback_duration': data.get('playback_duration', 0),
+            'playback_time': data.get('playback_time', 0),
+            'publisher': data.get('publisher', "theNewGista"),
+            'ratings': data.get('ratings', 0),
+            'users': data.get('users', 0),
+            'status': data.get('status', {
                 'inProduction': False,
-                'production_status': 'Reviewing Content',
-            }
-        else:
-            # Ensure all status fields are present
-            if 'inProduction' not in gist_data['status']:
-                gist_data['status']['inProduction'] = False
-                
-            if 'production_status' not in gist_data['status']:
-                gist_data['status']['production_status'] = 'Reviewing Content'
-                
-            # Remove deprecated fields if they exist
-            if 'in_productionQueue' in gist_data['status']:
-                gist_data['status']['inProduction'] = gist_data['status'].pop('in_productionQueue')
-                
-            if 'is_done_playing' in gist_data['status']:
-                gist_data['status'].pop('is_done_playing')
-                
-            if 'playback_time' in gist_data['status']:
-                gist_data['status'].pop('playback_time')
-                
-            if 'is_now_playing' in gist_data['status']:
-                gist_data['status'].pop('is_now_playing')
+                'production_status': 'Reviewing Content'
+            }),
+            'createdAt': data.get('date_created', datetime.now().isoformat() + 'Z'),
+            'updatedAt': datetime.now().isoformat() + 'Z'
+        }
         
-        # Ensure segments are properly formatted
-        if 'segments' not in gist_data:
-            gist_data['segments'] = []
+        # Add the gist to the gists subcollection
+        db.collection('users').document(user_id).collection('gists').document(gist_id).set(gist_data)
+        logger.info(f"Added gist {gist_id} to subcollection for user {user_id}")
         
-        # Add the gist to Firebase
-        doc_ref.update({
-            'gists': firestore.ArrayUnion([gist_data])
-        })
+        # If a link_id is provided, associate it with the gist
+        link_id = data.get('link_id')
+        if link_id:
+            # Check if the link exists in the links subcollection
+            link_ref = db.collection('users').document(user_id).collection('links').document(link_id)
+            link_doc = link_ref.get()
+            
+            if link_doc.exists:
+                # Update the link with the gistId
+                link_ref.update({
+                    'gistId': gist_id,
+                    'updatedAt': datetime.now().isoformat() + 'Z'
+                })
+                
+                # Copy the link to the gist's links subcollection
+                link_data = link_doc.to_dict()
+                link_data['gistId'] = gist_id
+                db.collection('users').document(user_id).collection('gists').document(gist_id).collection('links').document(link_id).set(link_data)
+                logger.info(f"Associated link {link_id} with gist {gist_id}")
         
-        # Get the gist ID for notifying the CrewAI service
-        gist_id = gist_data['gistId']
+        # Notify CrewAI about the new gist
+        notify_crew_ai(user_id, gist_id)
         
-        # Notify the CrewAI service about the new gist
-        try:
-            # Import here to avoid circular imports
-            from Firebase.services import CrewAIService
-            
-            # Initialize the CrewAI service client
-            crew_ai_service = CrewAIService()
-            
-            # Call the CrewAI service to update the gist status using signal-based approach
-            status_response = crew_ai_service.update_gist_status(user_id, gist_id)
-            
-            # Log the notification
-            logger.info(f"CrewAI service notified about new gist: {status_response}")
-            
-            # Include notification status in the response
-            return jsonify({
-                "message": "Gist added successfully and CrewAI service notified", 
-                "gist": gist_data,
-                "notification": status_response
-            }), 201
-            
-        except Exception as e:
-            # Log the error but don't fail the gist creation
-            logger.error(f"Error notifying CrewAI service: {str(e)}")
-            
-            # Return success response with notification error
-            return jsonify({
-                "message": "Gist added successfully but failed to notify CrewAI service", 
-                "gist": gist_data,
-                "notification_error": str(e)
-            }), 201
-        
+        return jsonify({
+            "message": "Gist added successfully",
+            "gist": gist_data
+        }), 200
+    
     except Exception as e:
         logger.error(f"Error adding gist: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to add gist"}), 500
 
-@links_bp.route('/api/gists/notify-crew-ai/<user_id>/<gist_id>', methods=['POST'])
+@links_bp.route('/api/gists/<user_id>', methods=['GET'])
+def get_gists(user_id):
+    """
+    Get all gists for a user from the gists subcollection
+    """
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+    
+    try:
+        # Query the gists subcollection for the user
+        gists_snapshot = db.collection('users').document(user_id).collection('gists').get()
+        
+        # Convert the gists to a list
+        gists = [doc.to_dict() for doc in gists_snapshot]
+        
+        return jsonify({"gists": gists}), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting gists: {str(e)}")
+        return jsonify({"error": "Failed to get gists"}), 500
+
+@links_bp.route('/api/gists/<user_id>/<gist_id>', methods=['GET'])
+def get_gist(user_id, gist_id):
+    """
+    Get a specific gist from the gists subcollection
+    """
+    if not user_id or not gist_id:
+        return jsonify({"error": "user_id and gist_id are required"}), 400
+    
+    try:
+        # Get the gist from the gists subcollection
+        gist_doc = db.collection('users').document(user_id).collection('gists').document(gist_id).get()
+        
+        if not gist_doc.exists:
+            return jsonify({"error": f"Gist {gist_id} not found"}), 404
+        
+        gist = gist_doc.to_dict()
+        
+        return jsonify(gist), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting gist: {str(e)}")
+        return jsonify({"error": "Failed to get gist"}), 500
+
+@links_bp.route('/api/gists/<user_id>/<gist_id>/status', methods=['PUT'])
+def update_gist_status(user_id, gist_id):
+    """
+    Update the status of a gist using the signal-based approach
+    
+    This is a signal-based endpoint where:
+    1. No request body is required - simply making the PUT request triggers the status update
+    2. The server handles setting `inProduction: true` and `production_status: "In Production"` internally
+    3. When successful, the response includes the link URL string
+    """
+    if not user_id or not gist_id:
+        return jsonify({"error": "user_id and gist_id are required"}), 400
+    
+    try:
+        # Get the gist from the gists subcollection
+        gist_ref = db.collection('users').document(user_id).collection('gists').document(gist_id)
+        gist_doc = gist_ref.get()
+        
+        if not gist_doc.exists:
+            return jsonify({"error": f"Gist {gist_id} not found"}), 404
+        
+        # Update the gist status (signal-based approach)
+        gist_ref.update({
+            'status.inProduction': True,
+            'status.production_status': 'In Production',
+            'updatedAt': datetime.now().isoformat() + 'Z'
+        })
+        
+        logger.info(f"Updated status for gist {gist_id} of user {user_id} using signal-based approach")
+        
+        # Return the link URL in the response (required for signal-based approach)
+        gist = gist_doc.to_dict()
+        return jsonify({"link": gist.get('link')}), 200
+    
+    except Exception as e:
+        logger.error(f"Error updating gist status: {str(e)}")
+        return jsonify({"error": "Failed to update gist status"}), 500
+
 def notify_crew_ai(user_id, gist_id):
     """
-    Notify the CrewAI service about a gist update using the signal-based API.
+    Notify CrewAI about a new gist using the signal-based API approach.
     
-    This endpoint is specifically for notifying the CrewAI service about gist updates.
-    It will fail if the CrewAI service is unavailable, unlike the add_gist endpoint
-    which continues even if notification fails.
+    This uses the signal-based endpoint where:
+    1. No request body is required - simply making the PUT request triggers the status update
+    2. The server handles setting status values internally
+    3. When successful, the response includes the link URL string
     
     Args:
         user_id: The user ID
-        gist_id: The gist ID
-        
-    Returns:
-        A JSON response with the result
+        gist_id: The gist ID to update
     """
     try:
-        # First, check if the gist exists
-        doc_ref = db.collection('users').document(user_id)
-        doc = doc_ref.get()
+        # First, update the gist status in Firestore to indicate it's in production
+        db.collection('users').document(user_id).collection('gists').document(gist_id).update({
+            'status.inProduction': True,
+            'status.production_status': 'In Production',
+            'updatedAt': datetime.now().isoformat() + 'Z'
+        })
         
-        if not doc.exists:
-            return jsonify({"error": "User not found"}), 404
+        logger.info(f"Updated gist {gist_id} status to In Production")
+        
+        # Now, trigger the signal-based API endpoint
+        try:
+            # Get API base URL and API key from environment
+            api_base_url = os.getenv('CREW_AI_API_BASE_URL', 'https://api-yufqiolzaa-uc.a.run.app')
+            api_key = os.getenv('SERVICE_API_KEY')
             
-        user_data = doc.to_dict()
-        gist_exists = False
-        
-        if 'gists' in user_data:
-            for gist in user_data['gists']:
-                if gist.get('gistId') == gist_id:
-                    gist_exists = True
-                    break
-                    
-        if not gist_exists:
-            return jsonify({"error": "Gist not found"}), 404
-        
-        # Import here to avoid circular imports
-        from Firebase.services import CrewAIService
-        
-        # Initialize the CrewAI service client
-        crew_ai_service = CrewAIService()
-        
-        # Call the CrewAI service to update the gist status using signal-based approach
-        status_response = crew_ai_service.update_gist_status(user_id, gist_id)
-        
-        # Log the notification
-        logger.info(f"CrewAI service notified about gist update: {status_response}")
-        
-        # Check if the response indicates success
-        if isinstance(status_response, dict) and status_response.get('success') is False:
-            error_message = status_response.get('message', 'Unknown error')
-            raise Exception(error_message)
-        
-        return jsonify({
-            "message": "CrewAI service notified successfully", 
-            "response": status_response
-        }), 200
+            if not api_key:
+                logger.error("SERVICE_API_KEY environment variable is not set")
+                return
+            
+            # Set up headers
+            headers = {
+                'Content-Type': 'application/json',
+                'X-API-Key': api_key
+            }
+            
+            # Signal-based approach - empty JSON object
+            url = f"{api_base_url}/api/gists/{user_id}/{gist_id}/status"
+            response = requests.put(url, headers=headers, json={})
+            
+            if response.status_code == 200:
+                logger.info(f"Successfully notified CrewAI for gist {gist_id}")
+                # If response includes link URL, log it
+                response_data = response.json()
+                if 'link' in response_data:
+                    logger.info(f"CrewAI returned link: {response_data['link']}")
+            else:
+                logger.error(f"Failed to notify CrewAI: status code {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error calling CrewAI API: {str(e)}")
         
     except Exception as e:
-        logger.error(f"Error notifying CrewAI service: {str(e)}")
-        return jsonify({
-            "error": f"Service unavailable: {str(e)}"
-        }), 503  # Service Unavailable 
+        logger.error(f"Error notifying CrewAI: {str(e)}")
+
+# Register the blueprint
+def register_links_blueprint(app):
+    app.register_blueprint(links_bp) 

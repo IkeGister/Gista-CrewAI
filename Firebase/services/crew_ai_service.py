@@ -1,7 +1,8 @@
 """
-CrewAI Service Client
+CrewAI Service Client - Updated for Subcollections
 
-This module provides a client for interacting with the CrewAI backend service.
+This module provides a client for interacting with the CrewAI backend service
+using the subcollection-based database structure.
 It handles all service-to-service communication with the CrewAI backend.
 """
 
@@ -21,7 +22,7 @@ find_and_load_env_file()
 
 class CrewAIService:
     """
-    Client for interacting with the CrewAI backend service.
+    Client for interacting with the CrewAI backend service using subcollections.
     
     This class provides methods for retrieving and updating user gists.
     It handles authentication, request retries, and error handling.
@@ -112,7 +113,7 @@ class CrewAIService:
     
     def get_user_gists(self, user_id: str) -> Dict:
         """
-        Get all gists for a user.
+        Get all gists for a user from the gists subcollection.
         
         Args:
             user_id: The user ID to get gists for
@@ -121,12 +122,12 @@ class CrewAIService:
             Dictionary containing user gists data
         """
         logger.info(f"Getting gists for user: {user_id}")
-        # Updated endpoint to match documentation
+        # Using the subcollection endpoint
         return self._make_request('GET', f'/api/gists/{user_id}')
     
     def get_user_gist(self, user_id: str, gist_id: str) -> Dict:
         """
-        Get a specific gist by ID.
+        Get a specific gist by ID from the gists subcollection.
         
         Args:
             user_id: The user ID
@@ -136,13 +137,18 @@ class CrewAIService:
             Dictionary containing gist data
         """
         logger.info(f"Getting gist with ID: {gist_id} for user: {user_id}")
-        # Updated endpoint to match documentation
+        # Using the subcollection endpoint
         return self._make_request('GET', f'/api/gists/{user_id}/{gist_id}')
     
     def update_gist_status(self, user_id: str, gist_id: str, 
                           inProduction: bool = None, production_status: str = None) -> Dict:
         """
         Update the status of a gist using the signal-based API.
+        
+        This is a signal-based endpoint where:
+        1. No request body is required - simply making the PUT request triggers the status update
+        2. The server handles setting `inProduction: true` and `production_status: "Reviewing Content"` internally
+        3. When successful, the response includes the link URL string in the response body
         
         Args:
             user_id: The user ID
@@ -153,13 +159,11 @@ class CrewAIService:
         Returns:
             Dictionary containing the updated gist data or error information
         """
-        logger.info(f"Updating status for gist {gist_id} of user {user_id}")
-        
-        # Signal-based approach - empty JSON object
-        data = {}
+        logger.info(f"Triggering status update for gist {gist_id} of user {user_id}")
         
         try:
-            return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/status', data=data)
+            # Signal-based approach - empty JSON object
+            return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/status', data={})
         except Exception as e:
             logger.error(f"Error updating gist status: {str(e)}")
             return {"error": str(e)}
@@ -167,7 +171,7 @@ class CrewAIService:
     def batch_update_gists(self, user_id: str, gist_ids: List[str],
                           inProduction: bool = True, production_status: str = "review") -> Dict:
         """
-        Update the status of multiple gists.
+        Update the status of multiple gists in the gists subcollection.
         
         Args:
             user_id: The user ID
@@ -200,7 +204,7 @@ class CrewAIService:
     def update_gist_with_links(self, user_id: str, gist_id: str, links: List[Dict],
                               inProduction: bool = True, production_status: str = "review") -> Dict:
         """
-        Update a gist with links and status.
+        Update a gist with links and status in the subcollection structure.
         
         Args:
             user_id: The user ID
@@ -229,4 +233,60 @@ class CrewAIService:
             return self._make_request('PUT', f'/api/gists/{user_id}/{gist_id}/with-links', data=data)
         except Exception as e:
             logger.error(f"Error updating gist with links: {str(e)}")
-            return {"error": str(e)} 
+            return {"error": str(e)}
+    
+    def get_user_links(self, user_id: str) -> Dict:
+        """
+        Get all links for a user from the links subcollection.
+        
+        Args:
+            user_id: The user ID to get links for
+            
+        Returns:
+            Dictionary containing user links data
+        """
+        logger.info(f"Getting links for user: {user_id}")
+        return self._make_request('GET', f'/api/links/{user_id}')
+    
+    def get_gist_links(self, user_id: str, gist_id: str) -> Dict:
+        """
+        Get all links for a specific gist from the gist's links subcollection.
+        
+        Args:
+            user_id: The user ID
+            gist_id: The gist ID to get links for
+            
+        Returns:
+            Dictionary containing links data for the gist
+        """
+        logger.info(f"Getting links for gist {gist_id} of user {user_id}")
+        return self._make_request('GET', f'/api/gists/{user_id}/{gist_id}/links')
+    
+    def add_link_to_gist(self, user_id: str, gist_id: str, link_data: Dict) -> Dict:
+        """
+        Add a link to a specific gist in the gist's links subcollection.
+        
+        Args:
+            user_id: The user ID
+            gist_id: The gist ID to add the link to
+            link_data: Link data to add
+            
+        Returns:
+            Dictionary containing the added link data
+        """
+        logger.info(f"Adding link to gist {gist_id} for user {user_id}")
+        return self._make_request('POST', f'/api/gists/{user_id}/{gist_id}/links', data=link_data)
+    
+    def add_general_link(self, user_id: str, link_data: Dict) -> Dict:
+        """
+        Add a general link to the user's links subcollection.
+        
+        Args:
+            user_id: The user ID
+            link_data: Link data to add
+            
+        Returns:
+            Dictionary containing the added link data
+        """
+        logger.info(f"Adding general link for user {user_id}")
+        return self._make_request('POST', f'/api/links/{user_id}', data=link_data) 

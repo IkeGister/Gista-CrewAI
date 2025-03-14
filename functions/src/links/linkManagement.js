@@ -9,6 +9,9 @@ router.post("/store", async (req, res) => {
   try {
     const { user_id, link, auto_create_gist = true } = req.body;
 
+    // Generate a unique link ID
+    const link_id = `link_${Date.now()}`;
+
     // Create link document with metadata
     const linkData = {
       category: link.category || "Uncategorized",
@@ -17,17 +20,20 @@ router.post("/store", async (req, res) => {
         gist_created: false,  // Initially false
         gist_id: null,
         image_url: null,
-        link_id: `link_${Date.now()}`,  // Generate unique link ID
+        link_id: link_id,
         link_title: link.title || "",
         link_type: link.url?.endsWith(".pdf") ? "PDF" : "Web",
         url: link.url
       }
     };
 
-    // Add link to user's links array
-    await admin.firestore().collection("users").doc(user_id).update({
-      links: admin.firestore.FieldValue.arrayUnion(linkData)
-    });
+    // Add link to user's links subcollection
+    await admin.firestore()
+      .collection("users")
+      .doc(user_id)
+      .collection("links")
+      .doc(link_id)
+      .set(linkData);
 
     // If auto_create_gist is enabled, create a gist from the link
     let gistId = null;
@@ -35,8 +41,10 @@ router.post("/store", async (req, res) => {
     if (auto_create_gist) {
       try {
         // Prepare gist data from the link
+        const gistId = `gist_${uuidv4().replace(/-/g, '')}`;
+        
         const gistData = {
-          gistId: `gist_${uuidv4().replace(/-/g, '')}`,
+          gistId: gistId,
           title: linkData.gist_created.link_title || "Untitled Gist",
           image_url: linkData.gist_created.image_url || "",
           link: linkData.gist_created.url || "",
@@ -55,36 +63,25 @@ router.post("/store", async (req, res) => {
             production_status: 'Reviewing Content',
           }
         };
-        
-        gistId = gistData.gistId;
 
-        // Add the gist to Firebase
-        await admin.firestore().collection("users").doc(user_id).update({
-          gists: admin.firestore.FieldValue.arrayUnion(gistData)
-        });
+        // Add gist to the user's gists subcollection
+        await admin.firestore()
+          .collection("users")
+          .doc(user_id)
+          .collection("gists")
+          .doc(gistId)
+          .set(gistData);
 
         // Update the link to indicate a gist was created
-        const userRef = admin.firestore().collection("users").doc(user_id);
-        const userDoc = await userRef.get();
-        const userData = userDoc.data();
-        
-        // Find the link we just added and update its gist_created status
-        const updatedLinks = userData.links.map(userLink => {
-          if (userLink.gist_created?.link_id === linkData.gist_created.link_id) {
-            return {
-              ...userLink,
-              gist_created: {
-                ...userLink.gist_created,
-                gist_created: true,
-                gist_id: gistId
-              }
-            };
-          }
-          return userLink;
-        });
-        
-        // Update the user document
-        await userRef.update({ links: updatedLinks });
+        await admin.firestore()
+          .collection("users")
+          .doc(user_id)
+          .collection("links")
+          .doc(link_id)
+          .update({
+            "gist_created.gist_created": true,
+            "gist_created.gist_id": gistId
+          });
 
         // Notify the CrewAI service about the new gist
         try {
@@ -125,36 +122,35 @@ router.put("/update-gist-status/:user_id/:link_id", async (req, res) => {
     // Use link_id as gist_id if not provided to ensure consistency
     const finalGistId = gist_id || link_id;
 
-    const userRef = admin.firestore().collection("users").doc(user_id);
-    const userDoc = await userRef.get();
+    const linkRef = admin.firestore()
+      .collection("users")
+      .doc(user_id)
+      .collection("links")
+      .doc(link_id);
+    
+    const linkDoc = await linkRef.get();
         
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const userData = userDoc.data();
-    const linkIndex = userData.links.findIndex(
-      link => link.gist_created.link_id === link_id
-    );
-
-    if (linkIndex === -1) {
+    if (!linkDoc.exists) {
       return res.status(404).json({ error: "Link not found" });
     }
 
-    // Update the gist_created object
-    userData.links[linkIndex].gist_created = {
-      ...userData.links[linkIndex].gist_created,
-      gist_created: true,
-      gist_id: finalGistId,
-      image_url,
-      link_title: link_title || userData.links[linkIndex].gist_created.link_title
-    };
+    const linkData = linkDoc.data();
 
-    await userRef.update({ links: userData.links });
+    // Update the gist_created object within the link document
+    await linkRef.update({
+      "gist_created.gist_created": true,
+      "gist_created.gist_id": finalGistId,
+      "gist_created.image_url": image_url || linkData.gist_created.image_url,
+      "gist_created.link_title": link_title || linkData.gist_created.link_title
+    });
+
+    // Get the updated link
+    const updatedLinkDoc = await linkRef.get();
+    const updatedLinkData = updatedLinkDoc.data();
 
     res.json({ 
       message: "Link gist status updated successfully",
-      link: userData.links[linkIndex]
+      link: updatedLinkData
     });
   } catch (error) {
     console.error("Error updating link gist status:", error);
@@ -166,16 +162,28 @@ router.put("/update-gist-status/:user_id/:link_id", async (req, res) => {
 router.get("/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
+    
+    // Check if user exists
     const userDoc = await admin.firestore().collection("users").doc(user_id).get();
-
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const userData = userDoc.data();
+    // Get all links from subcollection
+    const linksSnapshot = await admin.firestore()
+      .collection("users")
+      .doc(user_id)
+      .collection("links")
+      .get();
+
+    const links = [];
+    linksSnapshot.forEach(doc => {
+      links.push(doc.data());
+    });
+
     res.json({ 
-      links: userData.links || [],
-      count: (userData.links || []).length
+      links: links,
+      count: links.length
     });
   } catch (error) {
     console.error("Error fetching links:", error);

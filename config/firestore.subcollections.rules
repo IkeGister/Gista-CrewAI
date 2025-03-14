@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Base rules for all documents
+    match /{document=**} {
+      allow read, write: if false; // Default to deny all
+    }
+    
+    // User document rules
+    match /users/{userId} {
+      // Allow users to read their own document
+      allow read: if request.auth.uid == userId;
+      
+      // Allow creation of user documents
+      allow create: if request.auth.uid == userId;
+      
+      // Allow updates to own user document with validation
+      allow update: if request.auth.uid == userId &&
+                      request.resource.data.id == userId;
+      
+      // Allow deletion of own user document
+      allow delete: if request.auth.uid == userId;
+      
+      // Gists subcollection rules
+      match /gists/{gistId} {
+        // Allow users to read their own gists
+        allow read: if request.auth.uid == userId;
+        
+        // Allow creation of gists in user's subcollection
+        allow create: if request.auth.uid == userId;
+        
+        // Allow updates to own gists with validation
+        allow update: if request.auth.uid == userId;
+        
+        // Allow deletion of own gists
+        allow delete: if request.auth.uid == userId;
+        
+        // Links subcollection within gists
+        match /links/{linkId} {
+          // Allow users to read links in their own gists
+          allow read: if request.auth.uid == userId;
+          
+          // Allow creation of links in user's gists
+          allow create: if request.auth.uid == userId;
+          
+          // Allow updates to links in own gists
+          allow update: if request.auth.uid == userId;
+          
+          // Allow deletion of links in own gists
+          allow delete: if request.auth.uid == userId;
+        }
+      }
+      
+      // General links subcollection rules
+      match /links/{linkId} {
+        // Allow users to read their own links
+        allow read: if request.auth.uid == userId;
+        
+        // Allow creation of links in user's subcollection
+        allow create: if request.auth.uid == userId;
+        
+        // Allow updates to own links
+        allow update: if request.auth.uid == userId;
+        
+        // Allow deletion of own links
+        allow delete: if request.auth.uid == userId;
+      }
+    }
+    
+    // Rules for public gists (if needed)
+    match /public-gists/{gistId} {
+      // Allow anyone to read public gists
+      allow read: if true;
+      
+      // Only allow creation by authenticated users
+      allow create: if request.auth != null &&
+                      request.resource.data.userId == request.auth.uid;
+      
+      // Only allow updates by the owner
+      allow update: if request.auth != null &&
+                      resource.data.userId == request.auth.uid;
+      
+      // Only allow deletion by the owner
+      allow delete: if request.auth != null &&
+                      resource.data.userId == request.auth.uid;
+    }
+    
+    // Rules for service accounts (for backend operations)
+    match /service-accounts/{serviceId} {
+      // No direct access to service accounts by clients
+      allow read, write: if false;
+    }
+  }
+} 
